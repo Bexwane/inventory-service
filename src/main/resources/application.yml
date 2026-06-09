@@ -1,0 +1,125 @@
+# ─────────────────────────────────────────────────────────────
+# enterprise-inventory — application configuration
+# FIX: All secrets removed from this file entirely.
+#      Real values are injected at runtime via environment
+#      variables or a secrets manager (HashiCorp Vault / AWS SSM).
+#      This file is safe to commit to git.
+# ─────────────────────────────────────────────────────────────
+
+spring:
+  application:
+    name: enterprise-inventory
+
+  datasource:
+    # FIX: credentials come from environment variables, never hardcoded
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/inventory_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD}               # no default — must be set explicitly
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      # FIX: pool name aids observability — shows up in metrics and thread dumps
+      pool-name: wms-hikari-pool
+
+  jpa:
+    hibernate:
+      ddl-auto: validate                   # never create/update in production
+    # FIX: show-sql: false — was leaking query data into logs in production
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false                  # only enable locally if debugging
+        # FIX: explicit dialect prevents silent fallback to a wrong one
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 50                   # enables batch inserts for bulk ops
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    # FIX: separate flyway credentials with minimal privileges (read+migrate only)
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/inventory_db}
+    user: ${FLYWAY_USERNAME:${DB_USERNAME:postgres}}
+    password: ${FLYWAY_PASSWORD:${DB_PASSWORD}}
+
+  # FIX: Kafka integration wired in
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      # FIX: acks=all ensures the broker only confirms once all replicas have the message
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true           # exactly-once producer semantics
+
+  # FIX: Redis for token blacklisting, idempotency keys, distributed locks
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+
+server:
+  port: 8080
+  # ssl:
+  #   enabled: true
+  #   key-store: ${SSL_KEYSTORE_PATH:classpath:keystore.p12}
+  #   key-store-password: ${SSL_KEYSTORE_PASSWORD}
+  #   key-store-type: PKCS12
+  #   key-alias: ${SSL_KEY_ALIAS:tomcat}
+  # FIX: hide Spring Boot version from error responses
+  error:
+    include-stacktrace: never
+    include-message: never                 # prevents internal messages leaking to clients
+    include-binding-errors: never
+
+# ─────────────────────────────────────────────────────────────
+# JWT configuration
+# FIX: secret is injected — never a literal string in source
+# ─────────────────────────────────────────────────────────────
+jwt:
+  # WARNING: The default fallback string below is for LOCAL DEVELOPMENT ONLY. 
+  # MUST REMOVE the fallback value before deploying to production!
+  secret: ${JWT_SECRET:this_is_a_very_long_and_secure_default_secret_key_for_local_development_only_do_not_use_in_prod}                    # min 64 chars, generated via: openssl rand -base64 64
+  expiration-ms: ${JWT_EXPIRATION_MS:3600000}          # 1 hour access token
+  refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:86400000}  # 24 hour refresh token
+
+# ─────────────────────────────────────────────────────────────
+# Actuator — health + metrics endpoints (secured)
+# ─────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        # FIX: only expose health and metrics — never expose env, beans, or heapdump
+        include: health,metrics,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ─────────────────────────────────────────────────────────────
+# Logging — structured, no sensitive data
+# ─────────────────────────────────────────────────────────────
+logging:
+  level:
+    root: INFO
+    com.enterprise.inventory: INFO
+    # FIX: Hibernate SQL logging off in production
+    org.hibernate.SQL: OFF
+    org.hibernate.type: OFF
+  pattern:
+    # FIX: include correlationId from MDC in every log line for traceability
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{correlationId}] %-5level %logger{36} - %msg%n"

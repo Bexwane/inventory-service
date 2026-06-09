@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # ─────────────────────────────────────────────────────────
+  # PostgreSQL Database
+  # ─────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: wms-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: inventory_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────
+  # Redis (For Idempotency & Token Blacklist)
+  # ─────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: wms-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # ─────────────────────────────────────────────────────────
+  # Kafka (For async SAP events)
+  # Uses Redpanda, a lightweight, Kafka-compatible alternative 
+  # that doesn't require Zookeeper (perfect for local dev)
+  # ─────────────────────────────────────────────────────────
+  kafka:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.2.19
+    container_name: wms-kafka
+    command:
+      - redpanda
+      - start
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://kafka:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://kafka:8082,external://localhost:18082
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+      - "8082:8082"
+      - "18082:18082"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+
+volumes:
+  postgres_data:
+  redis_data:
+  redpanda_data:
