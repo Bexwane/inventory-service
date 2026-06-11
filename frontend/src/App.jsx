@@ -55,6 +55,22 @@ const ProtectedRoute = ({ children }) => {
 const AppLayout = ({ children }) => {
   const { isAuthenticated, logout, canManageUsers } = useAuth();
   
+  // Reload protection popup
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = ''; // Standard way to trigger browser's reload warning
+    };
+    
+    if (isAuthenticated) {
+      window.addEventListener('beforeunload', handleBeforeUnload);
+    }
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isAuthenticated]);
+
   return (
     <div className="app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', padding: 0, margin: 0, overflow: 'hidden' }}>
       
@@ -71,7 +87,11 @@ const AppLayout = ({ children }) => {
           )}
 
           <button 
-            onClick={logout} 
+            onClick={() => {
+              logout().then(() => {
+                window.location.href = '/';
+              });
+            }} 
             style={{ position: 'absolute', top: '15px', right: '25px', zIndex: 100, background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}
           >
             <LogOut size={20} /> Logout

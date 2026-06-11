@@ -7,16 +7,37 @@ export default function Receive({ embedded = false, onSuccess }) {
   const [success, setSuccess] = useState(false);
 
   // Batch State
-  const [taskId, setTaskId] = useState(null);
-  const [sourceLocationId, setSourceLocationId] = useState('');
-  const [sourceConfirmed, setSourceConfirmed] = useState(false);
+  const [taskId, setTaskId] = useState(() => localStorage.getItem('receiveState_taskId') || null);
+  const [sourceLocationId, setSourceLocationId] = useState(() => localStorage.getItem('receiveState_sourceLocationId') || '');
+  const [sourceConfirmed, setSourceConfirmed] = useState(() => localStorage.getItem('receiveState_sourceConfirmed') === 'true');
   
   // Array of { containerId: string, items: [{ sku, destinationLocationId, qty }] }
-  const [containers, setContainers] = useState([]);
-  const [activeContainerId, setActiveContainerId] = useState(null);
+  const [containers, setContainers] = useState(() => {
+    const saved = localStorage.getItem('receiveState_containers');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [activeContainerId, setActiveContainerId] = useState(() => localStorage.getItem('receiveState_activeContainerId') || null);
 
   // Current Item Form State
-  const [itemForm, setItemForm] = useState({ sku: '', destinationLocationId: '', qty: 1 });
+  const [itemForm, setItemForm] = useState(() => {
+    const saved = localStorage.getItem('receiveState_itemForm');
+    return saved ? JSON.parse(saved) : { sku: '', destinationLocationId: '', qty: 1 };
+  });
+
+  // Persist state
+  React.useEffect(() => {
+    if (taskId) localStorage.setItem('receiveState_taskId', taskId);
+    else localStorage.removeItem('receiveState_taskId');
+    
+    localStorage.setItem('receiveState_sourceLocationId', sourceLocationId);
+    localStorage.setItem('receiveState_sourceConfirmed', sourceConfirmed.toString());
+    localStorage.setItem('receiveState_containers', JSON.stringify(containers));
+    
+    if (activeContainerId) localStorage.setItem('receiveState_activeContainerId', activeContainerId);
+    else localStorage.removeItem('receiveState_activeContainerId');
+    
+    localStorage.setItem('receiveState_itemForm', JSON.stringify(itemForm));
+  }, [taskId, sourceLocationId, sourceConfirmed, containers, activeContainerId, itemForm]);
   
   // UUID Regex for validation
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -124,6 +145,13 @@ export default function Receive({ embedded = false, onSuccess }) {
       setContainers([]);
       setActiveContainerId(null);
       setItemForm({ sku: '', destinationLocationId: '', qty: 1 });
+      
+      localStorage.removeItem('receiveState_taskId');
+      localStorage.removeItem('receiveState_sourceLocationId');
+      localStorage.removeItem('receiveState_sourceConfirmed');
+      localStorage.removeItem('receiveState_containers');
+      localStorage.removeItem('receiveState_activeContainerId');
+      localStorage.removeItem('receiveState_itemForm');
       
       if (onSuccess) onSuccess();
       setTimeout(() => setSuccess(false), 3000);
