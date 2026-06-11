@@ -1,6 +1,7 @@
 package com.enterprise.inventory.inventory.web.controller;
 
 import com.enterprise.inventory.inventory.infrastructure.config.JwtUtil;
+import com.enterprise.inventory.inventory.infrastructure.persistence.UserRepository;
 import com.enterprise.inventory.inventory.web.dto.AuthRequest;
 import com.enterprise.inventory.inventory.web.dto.AuthResponse;
 import com.enterprise.inventory.inventory.infrastructure.config.TokenBlacklistService;
@@ -43,6 +44,7 @@ public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService    userDetailsService;
+    private final UserRepository        userRepository;
     private final JwtUtil               jwtUtil;
     private final TokenBlacklistService tokenBlacklistService;
 
@@ -68,7 +70,12 @@ public class AuthController {
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(request.username());
 
-        String accessToken  = jwtUtil.generateAccessToken(userDetails);
+        // Look up the real database UUID — embed it in the token so controllers don't need a DB call
+        java.util.UUID userId = userRepository.findByUsernameAndIsActiveTrue(request.username())
+                .map(u -> u.getId())
+                .orElseThrow();
+
+        String accessToken  = jwtUtil.generateAccessToken(userDetails, userId);
         String refreshToken = jwtUtil.generateRefreshToken(userDetails);
 
         log.info("Login successful for user: {}", request.username());
@@ -76,7 +83,7 @@ public class AuthController {
         return ResponseEntity.ok(new AuthResponse(
                 accessToken,
                 refreshToken,
-                3600L   // access token valid for 1 hour — matches jwt.expiration-ms
+                3600L
         ));
     }
 
@@ -104,7 +111,12 @@ public class AuthController {
         String username = jwtUtil.extractUsername(refreshToken);
         UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-        String newAccessToken = jwtUtil.generateAccessToken(userDetails);
+        // Re-embed the real UUID on every refresh so it stays consistent
+        java.util.UUID userId = userRepository.findByUsernameAndIsActiveTrue(username)
+                .map(u -> u.getId())
+                .orElseThrow();
+
+        String newAccessToken = jwtUtil.generateAccessToken(userDetails, userId);
 
         return ResponseEntity.ok(new AuthResponse(
                 newAccessToken,

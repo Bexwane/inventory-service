@@ -30,8 +30,8 @@ export default function Login() {
   };
 
   return (
-    <div className="auth-container">
-      <div className="glass-panel auth-card animate-fade-in">
+    <div className="auth-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <div className="glass-panel auth-card animate-fade-in" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem', background: 'var(--bg-card)', borderRadius: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', border: 'var(--glass-border)' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <Package size={48} color="var(--accent-primary)" style={{ marginBottom: '1rem' }} />
           <h1 className="text-gradient">WMS Portal</h1>
@@ -75,7 +75,7 @@ export default function Login() {
             </div>
           </div>
 
-          <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', height: '56px', fontSize: '1.1rem', borderRadius: '12px' }} disabled={loading}>
             <LogIn size={18} />
             {loading ? 'Authenticating...' : 'Sign In'}
           </button>

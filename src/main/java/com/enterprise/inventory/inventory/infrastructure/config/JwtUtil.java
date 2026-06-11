@@ -45,10 +45,12 @@ public class JwtUtil {
 
     // ── Token generation ──────────────────────────────────────────────────────
 
-    public String generateAccessToken(UserDetails userDetails) {
+    public String generateAccessToken(UserDetails userDetails, java.util.UUID userId) {
         return buildToken(userDetails.getUsername(), "access", accessExpirationMs,
-                Map.of("roles", userDetails.getAuthorities().stream()
-                        .map(a -> a.getAuthority()).toList()));
+                Map.of(
+                        "roles",  userDetails.getAuthorities().stream().map(a -> a.getAuthority()).toList(),
+                        "userId", userId.toString()   // real DB UUID — no stub needed in controller
+                ));
     }
 
     public String generateRefreshToken(UserDetails userDetails) {
@@ -107,6 +109,12 @@ public class JwtUtil {
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    /** Extracts the real database UUID that was embedded at login time. */
+    public java.util.UUID extractUserId(String token) {
+        String userId = extractClaim(token, c -> c.get("userId", String.class));
+        return userId != null ? java.util.UUID.fromString(userId) : null;
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> resolver) {

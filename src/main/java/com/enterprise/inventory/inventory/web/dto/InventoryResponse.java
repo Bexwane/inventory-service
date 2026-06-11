@@ -16,5 +16,6 @@ public record InventoryResponse(
         int qtyReserved,
         int qtyAvailable,   // computed: onHand - reserved
         UUID locationId,
+        UUID containerId,
         Long version
 ) {}

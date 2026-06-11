@@ -43,10 +43,18 @@ public interface InventoryRepository extends JpaRepository<InventoryJpaEntity, U
 
     Optional<InventoryJpaEntity> findBySkuAndLocationId(String sku, UUID locationId);
 
+    @Query("SELECT i FROM InventoryJpaEntity i WHERE i.sku = :sku AND i.locationId = :locationId AND ((i.containerId IS NULL AND :containerId IS NULL) OR i.containerId = :containerId)")
+    Optional<InventoryJpaEntity> findExactMatch(@Param("sku") String sku, @Param("locationId") UUID locationId, @Param("containerId") UUID containerId);
+
     // ── Listing ───────────────────────────────────────────────────────────────
 
     // FIX: query updated for new column name qtyOnHand
     Page<InventoryJpaEntity> findByQtyOnHandGreaterThan(int quantity, Pageable pageable);
+
+    @Query("SELECT i FROM InventoryJpaEntity i WHERE i.qtyOnHand > 0 AND " +
+           "(:search IS NULL OR :search = '' OR LOWER(i.sku) LIKE LOWER(CONCAT('%', :search, '%')) " +
+           "OR CAST(i.locationId AS string) LIKE CONCAT('%', :search, '%'))")
+    Page<InventoryJpaEntity> searchAvailableInventory(@Param("search") String search, Pageable pageable);
 
     // FIX: FEFO — find stock ordered by earliest expiry first
     //      Picking service uses this to always pick the soonest-to-expire lot

@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.util.UUID;
+import java.util.Set;
+import java.util.HashSet;
 
 @Entity
 @Table(name = "users")
@@ -30,4 +32,10 @@ public class UserEntity {
 
     @Column(name = "is_active", nullable = false)
     private boolean isActive;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_permissions", joinColumns = @JoinColumn(name = "user_id"))
+    @Column(name = "permissions")
+    @Enumerated(EnumType.STRING)
+    private Set<Permission> permissions = new HashSet<>();
 }

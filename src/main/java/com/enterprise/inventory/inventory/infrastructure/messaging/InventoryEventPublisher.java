@@ -41,37 +41,43 @@ public class InventoryEventPublisher {
 
     private final KafkaTemplate<String, Map<String, Object>> kafkaTemplate;
 
-    public void publishStockReceived(String sku, UUID locationId, int qty, String taskId) {
-        publish(TOPIC_PUTAWAY_CONFIRMED, sku, Map.of(
-                "eventType",  "STOCK_RECEIVED",
-                "sku",        sku,
-                "locationId", locationId.toString(),
-                "qty",        qty,
-                "taskId",     taskId,
-                "occurredAt", Instant.now().toString()
-        ));
+    public void publishStockReceived(String sku, UUID locationId, UUID containerId, int qty, String taskId) {
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("eventType", "STOCK_RECEIVED");
+        payload.put("sku", sku);
+        payload.put("locationId", locationId.toString());
+        payload.put("containerId", containerId != null ? containerId.toString() : null);
+        payload.put("qty", qty);
+        payload.put("taskId", taskId);
+        payload.put("occurredAt", Instant.now().toString());
+
+        publish(TOPIC_PUTAWAY_CONFIRMED, sku, payload);
     }
 
-    public void publishPickConfirmed(String sku, UUID locationId, int qty, String taskId) {
-        publish(TOPIC_PICK_CONFIRMED, sku, Map.of(
-                "eventType",  "PICK_CONFIRMED",
-                "sku",        sku,
-                "locationId", locationId.toString(),
-                "qty",        qty,
-                "taskId",     taskId,
-                "occurredAt", Instant.now().toString()
-        ));
+    public void publishPickConfirmed(String sku, UUID locationId, UUID containerId, int qty, String taskId) {
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("eventType", "PICK_CONFIRMED");
+        payload.put("sku", sku);
+        payload.put("locationId", locationId.toString());
+        payload.put("containerId", containerId != null ? containerId.toString() : null);
+        payload.put("qty", qty);
+        payload.put("taskId", taskId);
+        payload.put("occurredAt", Instant.now().toString());
+
+        publish(TOPIC_PICK_CONFIRMED, sku, payload);
     }
 
-    public void publishShortPick(String sku, UUID locationId, String taskId, int discrepancy) {
-        publish(TOPIC_PICK_SHORT, sku, Map.of(
-                "eventType",   "SHORT_PICK",
-                "sku",         sku,
-                "locationId",  locationId.toString(),
-                "taskId",      taskId,
-                "discrepancy", discrepancy,
-                "occurredAt",  Instant.now().toString()
-        ));
+    public void publishShortPick(String sku, UUID locationId, UUID containerId, String taskId, int discrepancy) {
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("eventType", "SHORT_PICK");
+        payload.put("sku", sku);
+        payload.put("locationId", locationId.toString());
+        payload.put("containerId", containerId != null ? containerId.toString() : null);
+        payload.put("taskId", taskId);
+        payload.put("discrepancy", discrepancy);
+        payload.put("occurredAt", Instant.now().toString());
+
+        publish(TOPIC_PICK_SHORT, sku, payload);
     }
 
     private void publish(String topic, String key, Map<String, Object> payload) {

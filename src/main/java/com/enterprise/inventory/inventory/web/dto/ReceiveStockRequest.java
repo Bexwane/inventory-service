@@ -16,6 +16,8 @@ public record ReceiveStockRequest(
         @NotNull(message = "Destination location is required")
         UUID locationId,
 
+        UUID containerId,
+
         @Min(value = 1, message = "Quantity must be at least 1")
         int qty,
 

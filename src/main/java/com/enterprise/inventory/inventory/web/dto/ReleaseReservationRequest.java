@@ -13,14 +13,14 @@ public record ReleaseReservationRequest(
         @NotBlank(message = "SKU is required")
         String sku,
 
-        @NotNull(message = "Location is required")
+        @NotNull(message = "Source location is required")
         UUID locationId,
+
+        UUID containerId,
 
         @Min(value = 1, message = "Quantity must be at least 1")
         int qty,
 
-        @NotBlank(message = "Task ID is required")
+        @NotBlank(message = "Task ID is required for audit trail")
         String taskId
 ) {}
-
-

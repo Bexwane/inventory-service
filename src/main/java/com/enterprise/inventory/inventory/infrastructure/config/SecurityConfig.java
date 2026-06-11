@@ -88,6 +88,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/inventory/adjust").hasAnyRole("SUPERVISOR", "MANAGER")
                         // force-override putaway is SUPERVISOR only
                         .requestMatchers(HttpMethod.POST, "/api/v1/putaway/force").hasAnyRole("SUPERVISOR", "MANAGER")
+                        // user management is MANAGER only
+                        .requestMatchers("/api/v1/users/**").hasRole("MANAGER")
 
                         .anyRequest().authenticated()
                 )

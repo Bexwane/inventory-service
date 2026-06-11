@@ -1,6 +1,7 @@
 package com.enterprise.inventory.inventory.web.controller;
 
 import com.enterprise.inventory.inventory.application.InventoryService;
+import com.enterprise.inventory.inventory.infrastructure.config.JwtUtil;
 import com.enterprise.inventory.inventory.web.dto.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -39,6 +41,20 @@ public class InventoryController {
     private static final String IDEMPOTENCY_HEADER = "X-Idempotency-Key";
 
     private final InventoryService inventoryService;
+    private final JwtUtil           jwtUtil;
+
+    // ── Tasks ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Generate a new unique Task ID for frontend operations.
+     * 
+     * POST /api/v1/inventory/tasks/generate
+     */
+    @PostMapping("/tasks/generate")
+    public ResponseEntity<String> generateTaskId() {
+        String taskId = "TSK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        return ResponseEntity.ok(taskId);
+    }
 
     // ── Putaway ───────────────────────────────────────────────────────────────
 
@@ -49,23 +65,45 @@ public class InventoryController {
      * Header: X-Idempotency-Key: <uuid>  (required)
      * Role: WORKER, SUPERVISOR, MANAGER
      */
-    @PreAuthorize("hasAnyRole('WORKER', 'SUPERVISOR', 'MANAGER')")
+    @PreAuthorize("hasAuthority('CAN_PUTAWAY')")
     @PostMapping("/receive")
     public ResponseEntity<InventoryResponse> receiveStock(
             @Valid @RequestBody ReceiveStockRequest request,
             @RequestHeader(IDEMPOTENCY_HEADER) String idempotencyKey,
-            @AuthenticationPrincipal UserDetails principal) {
+            @RequestHeader("Authorization") String authHeader) {
 
-        // FIX: performer ID comes from the authenticated token — not from the request body
-        UUID performedBy = resolveUserId(principal);
+        UUID performedBy = resolveUserId(authHeader);
 
         InventoryResponse response = inventoryService.receiveStock(
                 request.sku(),
                 request.locationId(),
+                request.containerId(),
                 request.qty(),
                 request.taskId(),
                 performedBy,
                 idempotencyKey);
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Worker submits a nested batch of putaways under a single task.
+     *
+     * POST /api/v1/inventory/receive/batch
+     * Header: X-Idempotency-Key: <uuid>
+     * Role: WORKER, SUPERVISOR, MANAGER
+     */
+    @PreAuthorize("hasAuthority('CAN_PUTAWAY')")
+    @PostMapping("/receive/batch")
+    public ResponseEntity<List<InventoryResponse>> receiveStockBatch(
+            @Valid @RequestBody BatchPutawayRequest request,
+            @RequestHeader(IDEMPOTENCY_HEADER) String idempotencyKey,
+            @RequestHeader("Authorization") String authHeader) {
+
+        UUID performedBy = resolveUserId(authHeader);
+
+        List<InventoryResponse> response = inventoryService.receiveStockBatch(
+                request, performedBy, idempotencyKey);
 
         return ResponseEntity.ok(response);
     }
@@ -79,13 +117,13 @@ public class InventoryController {
      * POST /api/v1/inventory/pick/reserve
      * Role: WORKER, SUPERVISOR, MANAGER
      */
-    @PreAuthorize("hasAnyRole('WORKER', 'SUPERVISOR', 'MANAGER')")
+    @PreAuthorize("hasAuthority('CAN_PICK')")
     @PostMapping("/pick/reserve")
     public ResponseEntity<InventoryResponse> reserveStock(
             @Valid @RequestBody PickReserveRequest request,
-            @AuthenticationPrincipal UserDetails principal) {
+            @RequestHeader("Authorization") String authHeader) {
 
-        InventoryResponse response = inventoryService.reserveStock(request, resolveUserId(principal));
+        InventoryResponse response = inventoryService.reserveStock(request, resolveUserId(authHeader));
         return ResponseEntity.ok(response);
     }
 
@@ -97,15 +135,15 @@ public class InventoryController {
      * Header: X-Idempotency-Key: <uuid>  (required — prevents double-deduction)
      * Role: WORKER, SUPERVISOR, MANAGER
      */
-    @PreAuthorize("hasAnyRole('WORKER', 'SUPERVISOR', 'MANAGER')")
+    @PreAuthorize("hasAuthority('CAN_PICK')")
     @PostMapping("/pick/confirm")
     public ResponseEntity<InventoryResponse> confirmPick(
             @Valid @RequestBody PickConfirmRequest request,
             @RequestHeader(IDEMPOTENCY_HEADER) String idempotencyKey,
-            @AuthenticationPrincipal UserDetails principal) {
+            @RequestHeader("Authorization") String authHeader) {
 
         InventoryResponse response = inventoryService.confirmPick(
-                request, resolveUserId(principal), idempotencyKey);
+                request, resolveUserId(authHeader), idempotencyKey);
 
         return ResponseEntity.ok(response);
     }
@@ -117,15 +155,15 @@ public class InventoryController {
      * POST /api/v1/inventory/pick/release
      * Role: WORKER, SUPERVISOR, MANAGER
      */
-    @PreAuthorize("hasAnyRole('WORKER', 'SUPERVISOR', 'MANAGER')")
+    @PreAuthorize("hasAuthority('CAN_PICK')")
     @PostMapping("/pick/release")
     public ResponseEntity<Void> releaseReservation(
             @Valid @RequestBody ReleaseReservationRequest request,
-            @AuthenticationPrincipal UserDetails principal) {
+            @RequestHeader("Authorization") String authHeader) {
 
         inventoryService.releaseReservation(
-                request.sku(), request.locationId(), request.qty(),
-                request.taskId(), resolveUserId(principal));
+                request.sku(), request.locationId(), request.containerId(), request.qty(),
+                request.taskId(), resolveUserId(authHeader));
 
         return ResponseEntity.noContent().build();
     }
@@ -139,20 +177,38 @@ public class InventoryController {
      * Role: any authenticated user
      */
     @GetMapping
+    @PreAuthorize("hasAuthority('CAN_MANAGE_INVENTORY')")
     public ResponseEntity<PagedResponse<InventoryResponse>> getInventory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDir) {
+        
+        return ResponseEntity.ok(inventoryService.getInStockInventory(page, size, search, sortBy, sortDir));
+    }
+
+    // ── User Activity Logs ────────────────────────────────────────────────────
+
+    @GetMapping("/movements/me")
+    @PreAuthorize("hasAuthority('CAN_MANAGE_INVENTORY')")
+    public ResponseEntity<PagedResponse<StockMovementResponse>> getMyMovements(
+            @RequestHeader("Authorization") String authHeader,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
-        // FIX: service caps size at 100 internally — returns clean PagedResponse DTO
-        PagedResponse<InventoryResponse> response = inventoryService.getInStockInventory(page, size);
-        return ResponseEntity.ok(response);
+        UUID userId = resolveUserId(authHeader);
+        return ResponseEntity.ok(inventoryService.getMyMovements(userId, page, size));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private UUID resolveUserId(UserDetails principal) {
-        // In production: load the user entity by username to get the UUID
-        // Here: stub — replace with actual user lookup via UserRepository
-        return UUID.nameUUIDFromBytes(principal.getUsername().getBytes());
+    /**
+     * Extracts the real database UUID from the JWT token claims.
+     * The UUID is embedded at login time by AuthController — no DB call needed here.
+     */
+    private UUID resolveUserId(String authHeader) {
+        String token = authHeader.substring(7); // strip "Bearer "
+        return jwtUtil.extractUserId(token);
     }
 }

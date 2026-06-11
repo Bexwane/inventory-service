@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.function.Supplier;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 /**
  * Prevents double-processing when scanner apps retry requests.
@@ -41,16 +42,15 @@ public class IdempotencyService {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper        objectMapper;
 
-    @SuppressWarnings("unchecked")
-    public <T> T getOrCompute(String idempotencyKey, Supplier<T> operation) {
+    public <T> T getOrCompute(String idempotencyKey, Supplier<T> operation, Class<T> responseType) {
         String redisKey = PREFIX + idempotencyKey;
 
         try {
             String cached = redisTemplate.opsForValue().get(redisKey);
             if (cached != null) {
                 log.debug("Idempotency cache hit for key: {}", idempotencyKey);
-                // Return cached result — the operation already happened
-                return (T) objectMapper.readValue(cached, Object.class);
+                // Deserialize back into the exact type — no unsafe cast
+                return objectMapper.readValue(cached, responseType);
             }
         } catch (Exception e) {
             // Redis down — fall through and process normally
@@ -64,6 +64,31 @@ public class IdempotencyService {
                     redisKey, objectMapper.writeValueAsString(result), TTL);
         } catch (Exception e) {
             // Cache write failed — not critical, result is still returned to client
+            log.warn("Idempotency cache write failed: {}", e.getMessage());
+        }
+
+        return result;
+    }
+
+    public <T> T getOrCompute(String idempotencyKey, Supplier<T> operation, TypeReference<T> typeRef) {
+        String redisKey = PREFIX + idempotencyKey;
+
+        try {
+            String cached = redisTemplate.opsForValue().get(redisKey);
+            if (cached != null) {
+                log.debug("Idempotency cache hit for key: {}", idempotencyKey);
+                return objectMapper.readValue(cached, typeRef);
+            }
+        } catch (Exception e) {
+            log.warn("Idempotency cache read failed — processing anyway: {}", e.getMessage());
+        }
+
+        T result = operation.get();
+
+        try {
+            redisTemplate.opsForValue().set(
+                    redisKey, objectMapper.writeValueAsString(result), TTL);
+        } catch (Exception e) {
             log.warn("Idempotency cache write failed: {}", e.getMessage());
         }
 
