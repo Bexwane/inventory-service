@@ -1,3 +1,6 @@
+/**
+ * Component managing batch putaway (receiving) workflows, including multi-container scanning and local state recovery.
+ */
 import React, { useState } from 'react';
 import api from '../api';
 import { PackagePlus, CheckCircle, ScanLine, Plus, Box, FolderOpen, ArrowRight, Trash2 } from 'lucide-react';
@@ -5,51 +8,49 @@ import { PackagePlus, CheckCircle, ScanLine, Plus, Box, FolderOpen, ArrowRight, 
 export default function Receive({ embedded = false, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
+  const [containerInput, setContainerInput] = useState('');
+  const [showContainerInput, setShowContainerInput] = useState(false);
 
-  // Batch State
-  const [taskId, setTaskId] = useState(() => localStorage.getItem('receiveState_taskId') || null);
-  const [sourceLocationId, setSourceLocationId] = useState(() => localStorage.getItem('receiveState_sourceLocationId') || '');
-  const [sourceConfirmed, setSourceConfirmed] = useState(() => localStorage.getItem('receiveState_sourceConfirmed') === 'true');
+  const [taskId, setTaskId] = useState(() => sessionStorage.getItem('receiveState_taskId') || null);
+  const [sourceLocationId, setSourceLocationId] = useState(() => sessionStorage.getItem('receiveState_sourceLocationId') || '');
+  const [sourceConfirmed, setSourceConfirmed] = useState(() => sessionStorage.getItem('receiveState_sourceConfirmed') === 'true');
   
-  // Array of { containerId: string, items: [{ sku, destinationLocationId, qty }] }
   const [containers, setContainers] = useState(() => {
-    const saved = localStorage.getItem('receiveState_containers');
+    const saved = sessionStorage.getItem('receiveState_containers');
     return saved ? JSON.parse(saved) : [];
   });
-  const [activeContainerId, setActiveContainerId] = useState(() => localStorage.getItem('receiveState_activeContainerId') || null);
+  const [activeContainerId, setActiveContainerId] = useState(() => sessionStorage.getItem('receiveState_activeContainerId') || null);
 
-  // Current Item Form State
   const [itemForm, setItemForm] = useState(() => {
-    const saved = localStorage.getItem('receiveState_itemForm');
+    const saved = sessionStorage.getItem('receiveState_itemForm');
     return saved ? JSON.parse(saved) : { sku: '', destinationLocationId: '', qty: 1 };
   });
 
-  // Persist state
   React.useEffect(() => {
-    if (taskId) localStorage.setItem('receiveState_taskId', taskId);
-    else localStorage.removeItem('receiveState_taskId');
+    if (taskId) sessionStorage.setItem('receiveState_taskId', taskId);
+    else sessionStorage.removeItem('receiveState_taskId');
     
-    localStorage.setItem('receiveState_sourceLocationId', sourceLocationId);
-    localStorage.setItem('receiveState_sourceConfirmed', sourceConfirmed.toString());
-    localStorage.setItem('receiveState_containers', JSON.stringify(containers));
+    sessionStorage.setItem('receiveState_sourceLocationId', sourceLocationId);
+    sessionStorage.setItem('receiveState_sourceConfirmed', sourceConfirmed.toString());
+    sessionStorage.setItem('receiveState_containers', JSON.stringify(containers));
     
-    if (activeContainerId) localStorage.setItem('receiveState_activeContainerId', activeContainerId);
-    else localStorage.removeItem('receiveState_activeContainerId');
+    if (activeContainerId) sessionStorage.setItem('receiveState_activeContainerId', activeContainerId);
+    else sessionStorage.removeItem('receiveState_activeContainerId');
     
-    localStorage.setItem('receiveState_itemForm', JSON.stringify(itemForm));
+    sessionStorage.setItem('receiveState_itemForm', JSON.stringify(itemForm));
   }, [taskId, sourceLocationId, sourceConfirmed, containers, activeContainerId, itemForm]);
   
-  // UUID Regex for validation
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   const handleStartTask = async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await api.post('/inventory/tasks/generate');
       setTaskId(res.data);
     } catch (err) {
-      console.error(err);
-      alert("Failed to generate task ID: " + (err.response?.data?.message || err.message));
+      setError('Failed to generate task ID: ' + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
@@ -57,25 +58,28 @@ export default function Receive({ embedded = false, onSuccess }) {
 
   const handleConfirmSource = () => {
     if (!uuidRegex.test(sourceLocationId)) {
-      alert("Error: Source Location must be a valid UUID.");
+      setError('Source Location must be a valid UUID.');
       return;
     }
+    setError('');
     setSourceConfirmed(true);
   };
 
   const handleAddContainer = () => {
-    const newId = prompt("Scan or Enter Container UUID:");
+    const newId = containerInput.trim();
+    setContainerInput('');
+    setShowContainerInput(false);
     if (!newId) return;
     if (!uuidRegex.test(newId)) {
-      alert("Error: Container ID must be a valid UUID.");
+      setError('Container ID must be a valid UUID.');
       return;
     }
     if (containers.find(c => c.containerId === newId)) {
-      alert("Container already added.");
+      setError('Container already added.');
       setActiveContainerId(newId);
       return;
     }
-    
+    setError('');
     setContainers([...containers, { containerId: newId, items: [] }]);
     setActiveContainerId(newId);
   };
@@ -83,13 +87,14 @@ export default function Receive({ embedded = false, onSuccess }) {
   const handleAddItem = (e) => {
     e.preventDefault();
     if (!activeContainerId) {
-      alert("Please select or add a container first.");
+      setError('Please select or add a container first.');
       return;
     }
     if (!uuidRegex.test(itemForm.destinationLocationId)) {
-      alert("Error: Destination Location must be a valid UUID.");
+      setError('Destination Location must be a valid UUID.');
       return;
     }
+    setError('');
 
     setContainers(prev => prev.map(c => {
       if (c.containerId === activeContainerId) {
@@ -101,7 +106,6 @@ export default function Receive({ embedded = false, onSuccess }) {
       return c;
     }));
     
-    // Reset form except location (often workers put multiple SKUs into the same bin)
     setItemForm(prev => ({ ...prev, sku: '', qty: 1 }));
   };
 
@@ -118,11 +122,11 @@ export default function Receive({ embedded = false, onSuccess }) {
 
   const handleSubmitBatch = async () => {
     if (containers.length === 0 || containers.every(c => c.items.length === 0)) {
-      alert("Cannot submit an empty batch.");
+      setError('Cannot submit an empty batch. Add at least one item.');
       return;
     }
+    setError('');
 
-    // Filter out empty containers
     const payloadContainers = containers.filter(c => c.items.length > 0);
 
     setLoading(true);
@@ -138,7 +142,6 @@ export default function Receive({ embedded = false, onSuccess }) {
       });
       
       setSuccess(true);
-      // Reset State
       setTaskId(null);
       setSourceLocationId('');
       setSourceConfirmed(false);
@@ -146,25 +149,22 @@ export default function Receive({ embedded = false, onSuccess }) {
       setActiveContainerId(null);
       setItemForm({ sku: '', destinationLocationId: '', qty: 1 });
       
-      localStorage.removeItem('receiveState_taskId');
-      localStorage.removeItem('receiveState_sourceLocationId');
-      localStorage.removeItem('receiveState_sourceConfirmed');
-      localStorage.removeItem('receiveState_containers');
-      localStorage.removeItem('receiveState_activeContainerId');
-      localStorage.removeItem('receiveState_itemForm');
+      sessionStorage.removeItem('receiveState_taskId');
+      sessionStorage.removeItem('receiveState_sourceLocationId');
+      sessionStorage.removeItem('receiveState_sourceConfirmed');
+      sessionStorage.removeItem('receiveState_containers');
+      sessionStorage.removeItem('receiveState_activeContainerId');
+      sessionStorage.removeItem('receiveState_itemForm');
       
       if (onSuccess) onSuccess();
       setTimeout(() => setSuccess(false), 3000);
     } catch (error) {
-      console.error(error);
-      const msg = error.response?.data?.message || error.response?.data?.error || error.message || "Unknown error";
-      alert(`Error receiving batch: ${msg}`);
+      const msg = error.response?.data?.message || error.response?.data?.error || error.message || 'Unknown error';
+      setError(`Error receiving batch: ${msg}`);
     } finally {
       setLoading(false);
     }
   };
-
-  // ── Render Helpers ──────────────────────────────────────────
 
   if (success) {
     return (
@@ -193,18 +193,19 @@ export default function Receive({ embedded = false, onSuccess }) {
           </div>
         </div>
 
-        {/* STEP 1: Generate Task */}
         {!taskId && (
           <div style={{ textAlign: 'center', padding: '3rem 0' }}>
             <PackagePlus size={64} color="var(--text-muted)" style={{ margin: '0 auto 1.5rem', opacity: 0.5 }} />
             <h3 style={{ marginBottom: '1.5rem', color: 'var(--text-secondary)' }}>Ready to start a new Putaway batch?</h3>
+            {error && (
+              <div style={{ padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.08)', color: '#dc2626', borderRadius: '8px', marginBottom: '1rem', fontWeight: '500' }}>{error}</div>
+            )}
             <button className="btn btn-primary btn-large" onClick={handleStartTask} disabled={loading} style={{ fontSize: '1.2rem', padding: '1rem 3rem', borderRadius: '16px' }}>
               {loading ? 'Starting...' : 'Start Putaway Task'}
             </button>
           </div>
         )}
 
-        {/* STEP 2: Source Location */}
         {taskId && !sourceConfirmed && (
           <div className="animate-fade-in">
             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
@@ -217,17 +218,18 @@ export default function Receive({ embedded = false, onSuccess }) {
                 style={{ fontSize: '1.25rem', padding: '1rem', borderRadius: '12px' }} 
               />
             </div>
+            {error && (
+              <div style={{ padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.08)', color: '#dc2626', borderRadius: '8px', marginBottom: '1rem', fontWeight: '500' }}>{error}</div>
+            )}
             <button className="btn btn-primary btn-large" onClick={handleConfirmSource} style={{ width: '100%', borderRadius: '16px', fontSize: '1.2rem' }}>
               Confirm Source <ArrowRight size={20} />
             </button>
           </div>
         )}
 
-        {/* STEP 3: Containers and Scanning */}
         {taskId && sourceConfirmed && (
           <div className="animate-fade-in">
             
-            {/* Chrome-style Tabs */}
             <div style={{ display: 'flex', overflowX: 'auto', gap: '4px', marginBottom: '-1px', zIndex: 1, position: 'relative', paddingLeft: '8px' }}>
               {containers.length === 0 && (
                 <div style={{ padding: '0.75rem 1.5rem', color: 'var(--danger)', fontWeight: 'bold', background: 'var(--bg-primary)', borderTopLeftRadius: '12px', borderTopRightRadius: '12px', border: '1px solid var(--border-color)', borderBottom: 'none' }}>
@@ -270,7 +272,7 @@ export default function Receive({ embedded = false, onSuccess }) {
               })}
               <button 
                 type="button"
-                onClick={handleAddContainer} 
+                onClick={() => setShowContainerInput(v => !v)} 
                 style={{ 
                   padding: '0.5rem', 
                   background: 'transparent', 
@@ -288,7 +290,22 @@ export default function Receive({ embedded = false, onSuccess }) {
               </button>
             </div>
 
-            {/* Active Container Content */}
+            {showContainerInput && (
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', padding: '0.75rem', background: 'rgba(59,130,246,0.06)', borderRadius: '10px', border: '1px solid rgba(59,130,246,0.2)' }}>
+                <input
+                  autoFocus
+                  type="text"
+                  value={containerInput}
+                  onChange={e => setContainerInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddContainer())}
+                  placeholder="Paste or scan Container UUID..."
+                  style={{ flex: 1, padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontFamily: 'monospace', fontSize: '0.9rem' }}
+                />
+                <button type="button" className="btn btn-primary" onClick={handleAddContainer} style={{ padding: '0.5rem 1rem', borderRadius: '8px' }}>Add</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowContainerInput(false); setContainerInput(''); }} style={{ padding: '0.5rem 0.75rem', borderRadius: '8px' }}>Cancel</button>
+              </div>
+            )}
+
             <div style={{ background: 'var(--bg-primary)', padding: '2rem', borderRadius: '16px', borderTopLeftRadius: containers.length > 0 ? '0' : '16px', border: '1px solid var(--border-color)', marginBottom: '2rem', position: 'relative', zIndex: 0 }}>
               <div style={{ marginBottom: '1.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Box size={16} /> UUID: {activeContainerId || 'N/A'}
@@ -316,7 +333,6 @@ export default function Receive({ embedded = false, onSuccess }) {
               </form>
             </div>
 
-            {/* Scanned Items Summary */}
             <div style={{ marginBottom: '2rem' }}>
               <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-secondary)' }}>Items in Active Container</h4>
               {activeContainerId && containers.find(c => c.containerId === activeContainerId)?.items.length === 0 ? (
@@ -341,7 +357,10 @@ export default function Receive({ embedded = false, onSuccess }) {
               )}
             </div>
 
-            {/* Submit Batch */}
+            {error && (
+              <div style={{ padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.08)', color: '#dc2626', borderRadius: '8px', marginBottom: '1rem', fontWeight: '500' }}>{error}</div>
+            )}
+
             <button 
               className="btn btn-primary btn-large" 
               onClick={handleSubmitBatch} 

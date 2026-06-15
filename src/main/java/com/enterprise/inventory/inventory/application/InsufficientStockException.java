@@ -1,9 +1,8 @@
-// ─────────────────────────────────────────────────────────────
-// FILE: InsufficientStockException.java
-// Specific exception for the picking service — maps to 422 in the error handler
-// ─────────────────────────────────────────────────────────────
 package com.enterprise.inventory.inventory.application;
 
+/**
+ * Exception thrown when there is insufficient stock to complete a reservation or pick.
+ */
 public class InsufficientStockException extends RuntimeException {
     public InsufficientStockException(String message) {
         super(message);

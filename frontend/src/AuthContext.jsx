@@ -1,9 +1,11 @@
+/**
+ * Authentication context provider managing user sessions, tokens, and roles.
+ */
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import api from './api';
 
 const AuthContext = createContext(null);
 
-// Decode a JWT payload without a library — the payload is just base64
 function decodeToken(token) {
   try {
     const payload = token.split('.')[1];
@@ -15,7 +17,7 @@ function decodeToken(token) {
 
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState(null); // 'ROLE_MANAGER', 'ROLE_WORKER', etc.
+  const [userRole, setUserRole] = useState(null);
   const [permissions, setPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,7 +27,6 @@ export const AuthProvider = ({ children }) => {
       const decoded = decodeToken(token);
       if (decoded) {
         setIsAuthenticated(true);
-        // roles is an array like ['ROLE_MANAGER', 'CAN_PICK', 'CAN_PUTAWAY']
         const rolesArray = decoded.roles || [];
         setUserRole(rolesArray.find(r => r.startsWith('ROLE_')) || null);
         setPermissions(rolesArray);
@@ -57,7 +58,6 @@ export const AuthProvider = ({ children }) => {
     try {
       await api.post('/auth/logout');
     } catch (e) {
-      // Ignore errors on logout
     } finally {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');

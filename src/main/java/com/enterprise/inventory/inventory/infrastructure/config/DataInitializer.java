@@ -1,5 +1,6 @@
 package com.enterprise.inventory.inventory.infrastructure.config;
 
+import com.enterprise.inventory.inventory.infrastructure.persistence.Role;
 import com.enterprise.inventory.inventory.infrastructure.persistence.UserEntity;
 import com.enterprise.inventory.inventory.infrastructure.persistence.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,9 +9,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+/**
+ * Configuration class that initializes default user accounts in the database on startup.
+ */
 @Configuration
+@EnableScheduling
 public class DataInitializer {
 
     private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
@@ -24,37 +30,52 @@ public class DataInitializer {
     public CommandLineRunner initDefaultUsers(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         return args -> {
             if (userRepository.count() == 0) {
-                createUser(userRepository, passwordEncoder, "EMP-001", "admin",      "admin123",      "MANAGER");
-                createUser(userRepository, passwordEncoder, "EMP-002", "supervisor", "supervisor123", "SUPERVISOR");
-                createUser(userRepository, passwordEncoder, "EMP-003", "worker1",    "worker123",     "WORKER");
-                createUser(userRepository, passwordEncoder, "EMP-004", "worker2",    "worker456",     "WORKER");
+                String adminPw      = getEnvOrFail("SEED_ADMIN_PASSWORD");
+                String supervisorPw = getEnvOrFail("SEED_SUPERVISOR_PASSWORD");
+                String worker1Pw    = getEnvOrFail("SEED_WORKER_PASSWORD");
 
-                log.info("=== Demo accounts ready ===");
-                log.info("  admin       / admin123       (MANAGER)");
-                log.info("  supervisor  / supervisor123  (SUPERVISOR)");
-                log.info("  worker1     / worker123      (WORKER)");
-                log.info("  worker2     / worker456      (WORKER)");
+                createUser(userRepository, passwordEncoder, "EMP-001", "admin",      adminPw,      Role.MANAGER, true);
+                createUser(userRepository, passwordEncoder, "EMP-002", "supervisor", supervisorPw, Role.SUPERVISOR, true);
+                createUser(userRepository, passwordEncoder, "EMP-003", "worker1",    worker1Pw,    Role.WORKER, true);
+                createUser(userRepository, passwordEncoder, "EMP-004", "worker2",    worker1Pw,    Role.WORKER, true);
+
+                log.info("Seed accounts created from environment variables.");
                 log.info("===========================");
             }
-            
-            // Dynamically add extra test workers if missing
-            if (userRepository.findByUsernameAndIsActiveTrue("worker3").isEmpty()) {
-                createUser(userRepository, passwordEncoder, "EMP-005", "worker3", "worker123", "VIEWER_ONLY");
+
+            if (userRepository.findByUsername("worker3").isEmpty()) {
+                String worker1Pw = getEnvOrFail("SEED_WORKER_PASSWORD");
+                createUser(userRepository, passwordEncoder, "EMP-005", "worker3", worker1Pw, Role.PICKER_ONLY, true);
             }
-            if (userRepository.findByUsernameAndIsActiveTrue("worker4").isEmpty()) {
-                createUser(userRepository, passwordEncoder, "EMP-006", "worker4", "worker123", "SUSPENDED");
+            if (userRepository.findByUsername("worker4").isEmpty()) {
+                String worker1Pw = getEnvOrFail("SEED_WORKER_PASSWORD");
+                createUser(userRepository, passwordEncoder, "EMP-006", "worker4", worker1Pw, Role.WORKER, false);
             }
         };
     }
 
+    /**
+     * Reads a required credential from environment variables.
+     * Falls back to a local-dev default only if the env var is truly absent,
+     * and logs a loud warning so it's never silently used in production.
+     */
+    private String getEnvOrFail(String envVar) {
+        String value = System.getenv(envVar);
+        if (value != null && !value.isBlank()) {
+            return value;
+        }
+        log.warn("⚠️  Environment variable '{}' is not set. Using insecure local-dev default. DO NOT deploy to production without setting this variable!", envVar);
+        return "changeme-local-dev-only";
+    }
+
     private void createUser(UserRepository repo, PasswordEncoder encoder,
-                            String employeeId, String username, String password, String role) {
+                            String employeeId, String username, String password, Role role, boolean isActive) {
         UserEntity u = new UserEntity();
         u.setEmployeeId(employeeId);
         u.setUsername(username);
         u.setPasswordHash(encoder.encode(password));
         u.setRole(role);
-        u.setActive(true);
+        u.setActive(isActive);
         repo.save(u);
     }
 }

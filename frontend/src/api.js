@@ -1,3 +1,6 @@
+/**
+ * Axios API client configuring base URL, authorization headers, and automatic token refresh interceptors.
+ */
 import axios from 'axios';
 
 const api = axios.create({
@@ -7,7 +10,6 @@ const api = axios.create({
   },
 });
 
-// Request Interceptor: Attach Token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
@@ -19,13 +21,11 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor: Handle Token Expiration
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    // If 401 or 403 and we haven't already retried this request
     const status = error.response?.status;
     if ((status === 401 || status === 403) && !originalRequest._retry && originalRequest.url !== '/auth/login') {
       originalRequest._retry = true;
@@ -33,7 +33,6 @@ api.interceptors.response.use(
         const refreshToken = localStorage.getItem('refreshToken');
         if (!refreshToken) throw new Error('No refresh token');
 
-        // Request a new access token
         const res = await axios.post('/api/v1/auth/refresh', null, {
           headers: { Authorization: `Bearer ${refreshToken}` }
         });
@@ -42,11 +41,9 @@ api.interceptors.response.use(
         localStorage.setItem('accessToken', accessToken);
         localStorage.setItem('refreshToken', newRefreshToken);
 
-        // Retry original request
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
-        // If refresh fails, log out
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         window.location.href = '/login';

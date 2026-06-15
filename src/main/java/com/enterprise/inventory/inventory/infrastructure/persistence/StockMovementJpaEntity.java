@@ -10,25 +10,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Append-only audit ledger — one row per stock movement.
- *
- * WHY THIS EXISTS:
- * Every inventory change (receive, pick, adjust) writes a row here
- * inside the same transaction. This gives you:
- *   - Complete audit trail for compliance
- *   - Ability to reconstruct stock level at any point in time
- *   - Source data for SAP goods movements (synced_to_sap flag)
- *   - Evidence for discrepancy investigations
- *
- * @Immutable prevents Hibernate from ever issuing an UPDATE on this table.
- * Rows are written once and never changed — this is the legal record.
- *
- * The synced_to_sap flag is polled by the Kafka publisher:
- * unsync'd rows are published to wms.stock.movement and the SAP adapter
- * sets this flag after a successful goods posting.
+ * JPA entity representing a stock movement audit ledger entry.
  */
 @Entity
-@Immutable                              // FIX: Hibernate will never UPDATE this table
+@Immutable
 @Table(
         name = "stock_movements",
         indexes = {
@@ -42,12 +27,12 @@ import java.util.UUID;
 public class StockMovementJpaEntity {
 
     public enum MovementType {
-        RECEIVE,        // stock came in via putaway
-        PICK,           // stock left via picking
-        ADJUST_UP,      // manual positive adjustment (supervisor only)
-        ADJUST_DOWN,    // manual negative adjustment (supervisor only)
-        RESERVE,        // qty reserved for a pick task
-        RELEASE         // reservation released (task cancelled/timed out)
+        RECEIVE,
+        PICK,
+        ADJUST_UP,
+        ADJUST_DOWN,
+        RESERVE,
+        RELEASE
     }
 
     @Id
@@ -73,26 +58,22 @@ public class StockMovementJpaEntity {
     @Column(name = "qty", nullable = false)
     private int qty;
 
-    // The task or order that caused this movement
     @Column(name = "reference_id", length = 100)
     private String referenceId;
 
     @Column(name = "reference_type", length = 50)
-    private String referenceType;   // "PUTAWAY_TASK", "PICK_TASK", "ADJUSTMENT"
+    private String referenceType;
 
     @Column(name = "performed_by", nullable = false)
     private UUID performedBy;
 
-    // FIX: set automatically — cannot be faked by application code
     @CreationTimestamp
     @Column(name = "occurred_at", nullable = false, updatable = false)
     private Instant occurredAt;
 
-    // FIX: SAP sync flag — Kafka publisher queries WHERE synced_to_sap = false
     @Column(name = "synced_to_sap", nullable = false)
     private boolean syncedToSap = false;
 
-    // Factory method — use this instead of a constructor to make intent clear
     public static StockMovementJpaEntity of(MovementType type, String sku,
                                             UUID fromLocation, UUID toLocation,
                                             UUID container, int qty,

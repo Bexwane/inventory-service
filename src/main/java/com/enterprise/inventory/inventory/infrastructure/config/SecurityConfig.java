@@ -19,19 +19,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 
 /**
- * Security configuration.
- *
- * FIX 1: InMemoryUserDetailsManager removed entirely.
- *         Users are loaded from PostgreSQL via DatabaseUserDetailsService.
- *         Adding/removing workers is a database operation, not a code change.
- *
- * FIX 2: Three roles defined — WORKER, SUPERVISOR, MANAGER.
- *         Endpoint access is controlled per role.
- *         @EnableMethodSecurity allows @PreAuthorize at method level for fine-grained control.
- *
- * FIX 3: Security response headers added — prevents clickjacking, sniffing, etc.
- *
- * FIX 4: Correlation ID filter runs before JWT filter so every request gets a trace ID.
+ * Security configuration for the application, establishing filter chains, password encoding, and authentication management.
  */
 @Configuration
 @EnableWebSecurity
@@ -53,51 +41,26 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // stateless API — CSRF not applicable, but keep headers
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-                // FIX: security response headers
                 .headers(headers -> headers
-                        .frameOptions(f -> f.deny())                           // prevent clickjacking
-                        .contentTypeOptions(c -> {})                           // no-sniff
+                        .frameOptions(f -> f.deny())
+                        .contentTypeOptions(c -> {})
                         .httpStrictTransportSecurity(hsts -> hsts
                                 .includeSubDomains(true)
                                 .maxAgeInSeconds(31536000))
                         .referrerPolicy(r ->
                                 r.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
                 )
-
-                // ── Endpoint access rules ──────────────────────────────────────
                 .authorizeHttpRequests(auth -> auth
-                        // public: login and refresh
                         .requestMatchers("/api/v1/auth/login").permitAll()
                         .requestMatchers("/api/v1/auth/refresh").permitAll()
-                        // actuator health is public; other actuator endpoints require MANAGER
                         .requestMatchers("/actuator/health").permitAll()
-                        .requestMatchers("/actuator/**").hasRole("MANAGER")
-
-                        // FIX: role-based endpoint control
-                        // any authenticated worker can query inventory
-                        .requestMatchers(HttpMethod.GET, "/api/v1/inventory/**").authenticated()
-                        // receiving stock = WORKER or above
-                        .requestMatchers(HttpMethod.POST, "/api/v1/inventory/receive").hasAnyRole("WORKER", "SUPERVISOR", "MANAGER")
-                        // picking requires WORKER or above
-                        .requestMatchers(HttpMethod.POST, "/api/v1/inventory/pick/**").hasAnyRole("WORKER", "SUPERVISOR", "MANAGER")
-                        // stock adjustments are SUPERVISOR only
-                        .requestMatchers(HttpMethod.POST, "/api/v1/inventory/adjust").hasAnyRole("SUPERVISOR", "MANAGER")
-                        // force-override putaway is SUPERVISOR only
-                        .requestMatchers(HttpMethod.POST, "/api/v1/putaway/force").hasAnyRole("SUPERVISOR", "MANAGER")
-                        // user management is MANAGER only
-                        .requestMatchers("/api/v1/users/**").hasRole("MANAGER")
-
+                        .requestMatchers("/actuator/**").hasAuthority("CAN_MANAGE_USERS")
                         .anyRequest().authenticated()
                 )
-
-                // FIX: correlation ID runs first so every log line has a trace ID
                 .addFilterBefore(correlationIdFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-                // FIX: Rate limiting runs AFTER JWT auth, so we know who the user is
                 .addFilterAfter(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
@@ -105,7 +68,6 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        // strength=12 is the enterprise minimum — default 10 is too weak for 2024 hardware
         return new BCryptPasswordEncoder(12);
     }
 
@@ -115,14 +77,7 @@ public class SecurityConfig {
             PasswordEncoder passwordEncoder) {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
-        // FIX: hide whether username or password was wrong — same error either way
         provider.setHideUserNotFoundExceptions(true);
         return new ProviderManager(provider);
     }
-
-    /*
-     * NOTE: UserDetailsService bean is NOT defined here.
-     * It is defined in DatabaseUserDetailsService which loads users from PostgreSQL.
-     * Spring picks it up automatically via @Service — no manual wiring needed.
-     */
 }

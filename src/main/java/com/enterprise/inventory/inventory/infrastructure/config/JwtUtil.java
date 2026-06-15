@@ -4,80 +4,73 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import java.security.KeyPair;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.SecretKey;
+import java.util.Date;
 import java.util.Date;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 /**
- * Handles JWT creation and validation.
- *
- * FIX 1: Secret is injected from application.yml → environment variable.
- *         No hardcoded string literal anywhere in this class.
- *
- * FIX 2: Access token (short-lived) + refresh token (long-lived) pattern.
- *         Workers get a new access token via refresh — scanners never
- *         drop mid-shift due to expiry.
- *
- * FIX 3: Token type claim ("typ": "access" | "refresh") prevents a
- *         refresh token being used as an access token and vice versa.
+ * Utility class to generate, parse, and validate JSON Web Tokens for authentication.
  */
 @Component
 public class JwtUtil {
 
-    private final SecretKey key;
+    private final PrivateKey privateKey;
+    private final PublicKey publicKey;
     private final long accessExpirationMs;
     private final long refreshExpirationMs;
 
-    // FIX: @Value reads from application.yml which reads from ${JWT_SECRET} env var
     public JwtUtil(
-            @Value("${jwt.secret}") String secret,
             @Value("${jwt.expiration-ms}") long accessExpirationMs,
             @Value("${jwt.refresh-expiration-ms}") long refreshExpirationMs) {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes());
         this.accessExpirationMs = accessExpirationMs;
         this.refreshExpirationMs = refreshExpirationMs;
+        
+        try {
+            java.security.KeyPairGenerator keyPairGenerator = java.security.KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(2048);
+            KeyPair keyPair = keyPairGenerator.generateKeyPair();
+            this.privateKey = keyPair.getPrivate();
+            this.publicKey = keyPair.getPublic();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new RuntimeException("Failed to generate RSA keys", e);
+        }
     }
-
-    // ── Token generation ──────────────────────────────────────────────────────
 
     public String generateAccessToken(UserDetails userDetails, java.util.UUID userId) {
         return buildToken(userDetails.getUsername(), "access", accessExpirationMs,
                 Map.of(
                         "roles",  userDetails.getAuthorities().stream().map(a -> a.getAuthority()).toList(),
-                        "userId", userId.toString()   // real DB UUID — no stub needed in controller
+                        "userId", userId.toString()
                 ));
     }
 
     public String generateRefreshToken(UserDetails userDetails) {
-        // FIX: refresh token carries only subject + type — no roles/claims
-        //      so it cannot be used to authorise any action directly
         return buildToken(userDetails.getUsername(), "refresh", refreshExpirationMs, Map.of());
     }
 
     private String buildToken(String subject, String tokenType,
-                              long expirationMs, Map<String, Object> extraClaims) {
+                               long expirationMs, Map<String, Object> extraClaims) {
         long now = System.currentTimeMillis();
         return Jwts.builder()
                 .subject(subject)
-                .claim("typ", tokenType)         // FIX: token type to prevent substitution
+                .id(UUID.randomUUID().toString())
+                .claim("typ", tokenType)
                 .claims(extraClaims)
                 .issuedAt(new Date(now))
                 .expiration(new Date(now + expirationMs))
-                .signWith(key)
+                .signWith(privateKey)
                 .compact();
     }
 
-    // ── Token validation ──────────────────────────────────────────────────────
-
-    /**
-     * Validates an access token against a loaded UserDetails.
-     * FIX: explicitly checks token type — a refresh token passed here is rejected.
-     */
     public boolean isAccessTokenValid(String token, UserDetails userDetails) {
         try {
             Claims claims = extractAllClaims(token);
@@ -87,14 +80,10 @@ public class JwtUtil {
                     && "access".equals(tokenType)
                     && !isExpired(claims);
         } catch (JwtException | IllegalArgumentException e) {
-            // FIX: catch all JWT exceptions — malformed, tampered, expired
             return false;
         }
     }
 
-    /**
-     * Validates a refresh token (type check + expiry only — no UserDetails needed).
-     */
     public boolean isRefreshTokenValid(String token) {
         try {
             Claims claims = extractAllClaims(token);
@@ -105,16 +94,17 @@ public class JwtUtil {
         }
     }
 
-    // ── Claims extraction ─────────────────────────────────────────────────────
-
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
-    /** Extracts the real database UUID that was embedded at login time. */
     public java.util.UUID extractUserId(String token) {
         String userId = extractClaim(token, c -> c.get("userId", String.class));
         return userId != null ? java.util.UUID.fromString(userId) : null;
+    }
+
+    public String extractJti(String token) {
+        return extractClaim(token, Claims::getId);
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> resolver) {
@@ -122,9 +112,8 @@ public class JwtUtil {
     }
 
     private Claims extractAllClaims(String token) {
-        // FIX: verifyWith(key) — parser will throw JwtException on bad signature or expiry
         return Jwts.parser()
-                .verifyWith(key)
+                .verifyWith(publicKey)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();

@@ -5,6 +5,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
+/**
+ * Data transfer object representing a specific item in a batch putaway request.
+ */
 public record ItemPutawayDTO(
         @NotBlank(message = "SKU is required")
         String sku,

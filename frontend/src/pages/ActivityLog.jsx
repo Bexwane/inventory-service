@@ -1,3 +1,6 @@
+/**
+ * Component displaying the logged in user's personal activity log with server-side pagination.
+ */
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 import { RefreshCw, ChevronLeft, ChevronRight, Activity, CheckCircle, XCircle } from 'lucide-react';

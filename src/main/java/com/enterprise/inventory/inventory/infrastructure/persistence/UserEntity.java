@@ -8,6 +8,9 @@ import java.util.UUID;
 import java.util.Set;
 import java.util.HashSet;
 
+/**
+ * JPA entity representing a warehouse user account, including role and permission sets.
+ */
 @Entity
 @Table(name = "users")
 @Getter
@@ -28,12 +31,13 @@ public class UserEntity {
     private String passwordHash;
 
     @Column(name = "role", nullable = false)
-    private String role;
+    @Enumerated(EnumType.STRING)
+    private Role role;
 
     @Column(name = "is_active", nullable = false)
     private boolean isActive;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "user_permissions", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "permissions")
     @Enumerated(EnumType.STRING)

@@ -1,14 +1,17 @@
+/**
+ * Component managing stock picking operations, handling reserve, short picking, and confirmation.
+ */
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 import { PackageMinus, CheckCircle, ShieldAlert, ScanLine } from 'lucide-react';
 
 export default function Pick({ embedded = false, onSuccess }) {
   const [step, setStep] = useState(() => {
-    const saved = localStorage.getItem('pickState_step');
+    const saved = sessionStorage.getItem('pickState_step');
     return saved ? parseInt(saved, 10) : 1;
   });
   const [formData, setFormData] = useState(() => {
-    const saved = localStorage.getItem('pickState_formData');
+    const saved = sessionStorage.getItem('pickState_formData');
     return saved ? JSON.parse(saved) : {
       sku: '',
       locationId: '',
@@ -19,18 +22,21 @@ export default function Pick({ embedded = false, onSuccess }) {
     };
   });
   const [idempotencyKey, setIdempotencyKey] = useState(() => {
-    return localStorage.getItem('pickState_idempotencyKey') || '';
+    return sessionStorage.getItem('pickState_idempotencyKey') || '';
+  });
+  const [reserveIdempotencyKey, setReserveIdempotencyKey] = useState(() => {
+    return sessionStorage.getItem('pickState_reserveIdempotencyKey') || crypto.randomUUID();
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  // Persist state
   useEffect(() => {
-    localStorage.setItem('pickState_step', step.toString());
-    localStorage.setItem('pickState_formData', JSON.stringify(formData));
-    localStorage.setItem('pickState_idempotencyKey', idempotencyKey);
-  }, [step, formData, idempotencyKey]);
+    sessionStorage.setItem('pickState_step', step.toString());
+    sessionStorage.setItem('pickState_formData', JSON.stringify(formData));
+    sessionStorage.setItem('pickState_idempotencyKey', idempotencyKey);
+    sessionStorage.setItem('pickState_reserveIdempotencyKey', reserveIdempotencyKey);
+  }, [step, formData, idempotencyKey, reserveIdempotencyKey]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -61,10 +67,12 @@ export default function Pick({ embedded = false, onSuccess }) {
         containerId: formData.containerId || null,
         qty: parseInt(formData.qty, 10),
         taskId: formData.taskId
+      }, {
+        headers: { 'X-Idempotency-Key': reserveIdempotencyKey }
       });
       setStep(2);
       setIdempotencyKey(crypto.randomUUID());
-      setFormData({ ...formData, actualQty: formData.qty }); // Default actual to reserved
+      setFormData({ ...formData, actualQty: formData.qty });
       setMessage('Stock reserved! Please proceed to bin and confirm pick.');
       if (onSuccess) onSuccess();
     } catch (err) {
@@ -93,13 +101,12 @@ export default function Pick({ embedded = false, onSuccess }) {
 
       setMessage('Pick confirmed and sent to SAP successfully!');
       
-      // Reset state
       setStep(1);
       setFormData({ sku: '', locationId: '', containerId: '', qty: '', actualQty: '', taskId: '' });
       setIdempotencyKey('');
-      localStorage.removeItem('pickState_step');
-      localStorage.removeItem('pickState_formData');
-      localStorage.removeItem('pickState_idempotencyKey');
+      sessionStorage.removeItem('pickState_step');
+      sessionStorage.removeItem('pickState_formData');
+      sessionStorage.removeItem('pickState_idempotencyKey');
 
       if (onSuccess) onSuccess();
     } catch (err) {
@@ -120,13 +127,14 @@ export default function Pick({ embedded = false, onSuccess }) {
       });
       setMessage('Reservation released successfully.');
       
-      // Reset state
       setStep(1);
       setFormData({ sku: '', locationId: '', containerId: '', qty: '', actualQty: '', taskId: '' });
       setIdempotencyKey('');
-      localStorage.removeItem('pickState_step');
-      localStorage.removeItem('pickState_formData');
-      localStorage.removeItem('pickState_idempotencyKey');
+      setReserveIdempotencyKey(crypto.randomUUID());
+      sessionStorage.removeItem('pickState_step');
+      sessionStorage.removeItem('pickState_formData');
+      sessionStorage.removeItem('pickState_idempotencyKey');
+      sessionStorage.removeItem('pickState_reserveIdempotencyKey');
       
       if (onSuccess) onSuccess();
     } catch (err) {

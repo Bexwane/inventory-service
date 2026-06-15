@@ -19,26 +19,32 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Set;
 
 /**
- * Filter to apply rate limiting per authenticated user.
- *
- * FIX: Replaced unbounded ConcurrentHashMap with a Caffeine cache that
- * automatically evicts inactive users after 10 minutes.
- * The old approach would grow forever (one Bucket object per user, never removed).
- *
- * NOTE: This is still a single-node in-memory rate limiter.
- * For multi-instance deployments, replace with a Redis-backed bucket
- * using bucket4j-redis so limits are shared across all nodes.
+ * Filter that applies two-tier rate limiting:
+ * 1. IP-based limiting for unauthenticated auth endpoints (brute-force protection).
+ * 2. Per-user limiting (60 req/min) for all authenticated API calls.
  */
 @Slf4j
 @Component
 public class RateLimitingFilter extends OncePerRequestFilter {
 
-    // Evicts user buckets that haven't been accessed in 10 minutes — prevents memory leak
-    private final Cache<String, Bucket> cache = Caffeine.newBuilder()
+    private static final Set<String> AUTH_RATE_LIMITED_PATHS = Set.of(
+            "/api/v1/auth/login",
+            "/api/v1/auth/refresh"
+    );
+
+    /** Per-user bucket: 60 requests per minute with a burst of up to 20. */
+    private final Cache<String, Bucket> userBuckets = Caffeine.newBuilder()
             .expireAfterAccess(Duration.ofMinutes(10))
             .maximumSize(10_000)
+            .build();
+
+    /** Per-IP bucket: 10 login attempts per minute (brute-force guard). */
+    private final Cache<String, Bucket> ipBuckets = Caffeine.newBuilder()
+            .expireAfterAccess(Duration.ofMinutes(10))
+            .maximumSize(50_000)
             .build();
 
     @Override
@@ -46,13 +52,26 @@ public class RateLimitingFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
-        // Skip rate limiting for auth endpoints (no user principal yet)
         String path = request.getRequestURI();
-        if (path.startsWith("/api/v1/auth/")) {
+
+        // Tier 1: IP-based rate limiting on login/refresh endpoints
+        if (AUTH_RATE_LIMITED_PATHS.contains(path)) {
+            String clientIp = getClientIp(request);
+            Bucket ipBucket = ipBuckets.get(clientIp, this::createLoginBucket);
+            ConsumptionProbe probe = ipBucket.tryConsumeAndReturnRemaining(1);
+            if (!probe.isConsumed()) {
+                long waitSeconds = probe.getNanosToWaitForRefill() / 1_000_000_000;
+                log.warn("Login rate limit exceeded for IP: {}", clientIp);
+                response.addHeader("X-Rate-Limit-Retry-After-Seconds", String.valueOf(waitSeconds));
+                response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+                response.getWriter().write("Too many login attempts. Please try again later.");
+                return;
+            }
             filterChain.doFilter(request, response);
             return;
         }
 
+        // Tier 2: Per-user rate limiting for all authenticated requests
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()
                 || "anonymousUser".equals(authentication.getPrincipal())) {
@@ -61,26 +80,38 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         }
 
         String username = authentication.getName();
-        Bucket bucket = cache.get(username, this::createNewBucket);
+        Bucket bucket = userBuckets.get(username, this::createUserBucket);
 
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
         if (probe.isConsumed()) {
             response.addHeader("X-Rate-Limit-Remaining", String.valueOf(probe.getRemainingTokens()));
             filterChain.doFilter(request, response);
         } else {
-            long waitForRefill = probe.getNanosToWaitForRefill() / 1_000_000_000;
+            long waitSeconds = probe.getNanosToWaitForRefill() / 1_000_000_000;
             log.warn("Rate limit exceeded for user: {}", username);
-            response.addHeader("X-Rate-Limit-Retry-After-Seconds", String.valueOf(waitForRefill));
+            response.addHeader("X-Rate-Limit-Retry-After-Seconds", String.valueOf(waitSeconds));
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.getWriter().write("Too many requests. Please try again later.");
         }
     }
 
-    private Bucket createNewBucket(String key) {
-        // 20 requests per second per user
-        Bandwidth limit = Bandwidth.classic(20, Refill.greedy(20, Duration.ofSeconds(1)));
-        return Bucket.builder()
-                .addLimit(limit)
-                .build();
+    /** 60 requests per minute for authenticated users, with a burst of 20. */
+    private Bucket createUserBucket(String key) {
+        Bandwidth limit = Bandwidth.classic(20, Refill.greedy(60, Duration.ofMinutes(1)));
+        return Bucket.builder().addLimit(limit).build();
+    }
+
+    /** 10 attempts per minute per IP for login/refresh endpoints. */
+    private Bucket createLoginBucket(String key) {
+        Bandwidth limit = Bandwidth.classic(10, Refill.greedy(10, Duration.ofMinutes(1)));
+        return Bucket.builder().addLimit(limit).build();
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

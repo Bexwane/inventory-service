@@ -1,3 +1,6 @@
+/**
+ * Component providing a swipe-activated trigger interface for scanning actions.
+ */
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ScanLine, ChevronUp, ChevronDown } from 'lucide-react';
@@ -8,7 +11,7 @@ export default function SwipeScan() {
   const startY = useRef(0);
   const navigate = useNavigate();
 
-  const maxDrag = 65; // pixels up/down allowed
+  const maxDrag = 65;
 
   const handlePointerDown = (e) => {
     setIsDragging(true);
@@ -20,7 +23,6 @@ export default function SwipeScan() {
     if (!isDragging) return;
     let newY = e.clientY - startY.current;
     
-    // Constrain drag to the track length
     if (newY > maxDrag) newY = maxDrag;
     if (newY < -maxDrag) newY = -maxDrag;
     
@@ -31,18 +33,14 @@ export default function SwipeScan() {
     if (!isDragging) return;
     setIsDragging(false);
     
-    // Trigger action if dragged far enough
     if (offsetY <= -maxDrag + 15) {
-      // Swiped UP completely -> Putaway (Receive)
       alert("Scanner triggered for Putaway (Cosmetic). Hardware not detected.");
       navigate('/receive');
     } else if (offsetY >= maxDrag - 15) {
-      // Swiped DOWN completely -> Pick
       alert("Scanner triggered for Picking (Cosmetic). Hardware not detected.");
       navigate('/pick');
     }
     
-    // Snap back to center
     setOffsetY(0);
     e.target.releasePointerCapture(e.pointerId);
   };
@@ -62,11 +60,10 @@ export default function SwipeScan() {
       position: 'relative',
       margin: 'auto 0',
       userSelect: 'none', 
-      touchAction: 'none', // Prevents screen scroll while dragging
+      touchAction: 'none',
       boxShadow: 'inset 0 4px 6px rgba(0,0,0,0.05)'
     }}>
       
-      {/* Top Marking: Putaway */}
       <div style={{ 
         color: offsetY < -20 ? 'var(--accent-primary)' : 'var(--text-muted)', 
         fontSize: '0.75rem', 
@@ -81,7 +78,6 @@ export default function SwipeScan() {
         Putaway
       </div>
       
-      {/* Draggable Scan Button */}
       <div 
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -101,14 +97,13 @@ export default function SwipeScan() {
           position: 'absolute', 
           top: 'calc(50% - 37px)',
           boxShadow: '0 6px 12px rgba(22, 163, 74, 0.4)',
-          transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)', // Spring back effect
+          transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
           zIndex: 10
         }}
       >
         <ScanLine size={36} />
       </div>
 
-      {/* Bottom Marking: Pick */}
       <div style={{ 
         color: offsetY > 20 ? 'var(--warning)' : 'var(--text-muted)', 
         fontSize: '0.75rem', 

@@ -1,9 +1,11 @@
+/**
+ * Root App component setting up routing, security contexts, dynamic layout, and session states.
+ */
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './AuthContext';
 import { Users, LogOut } from 'lucide-react';
 
-// Responsive hook
 export const useMediaQuery = (query) => {
   const [matches, setMatches] = useState(false);
 
@@ -18,17 +20,14 @@ export const useMediaQuery = (query) => {
   return matches;
 };
 
-// Pages
 import Login     from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Receive   from './pages/Receive';
 import Pick      from './pages/Pick';
 import UsersPage from './pages/Users';
 
-// Components
 import BottomNav from './components/BottomNav';
 
-// Global UI Context for table visibility
 export const UIContext = createContext();
 
 export const useUI = () => useContext(UIContext);
@@ -55,11 +54,10 @@ const ProtectedRoute = ({ children }) => {
 const AppLayout = ({ children }) => {
   const { isAuthenticated, logout, canManageUsers } = useAuth();
   
-  // Reload protection popup
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       e.preventDefault();
-      e.returnValue = ''; // Standard way to trigger browser's reload warning
+      e.returnValue = '';
     };
     
     if (isAuthenticated) {
@@ -74,7 +72,6 @@ const AppLayout = ({ children }) => {
   return (
     <div className="app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', padding: 0, margin: 0, overflow: 'hidden' }}>
       
-      {/* Top action buttons (Absolute positioned) */}
       {isAuthenticated && (
         <>
           {canManageUsers && (
@@ -99,12 +96,10 @@ const AppLayout = ({ children }) => {
         </>
       )}
 
-      {/* Main Content Area */}
       <main className="main-content" style={{ flex: 1, overflowY: 'hidden', minHeight: 0, padding: '40px 20px 100px 20px', width: '100%', display: 'flex', flexDirection: 'column' }}>
         {children}
       </main>
 
-      {/* Bottom Floating Pill Nav (Hidden on Desktop Mega-View) */}
       {isAuthenticated && (
         <div className="mobile-only">
           <BottomNav />

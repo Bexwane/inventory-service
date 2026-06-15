@@ -1,3 +1,6 @@
+/**
+ * Bottom navigation component managing route transitions and gesture-based scanner activation.
+ */
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, PackagePlus, PackageMinus, EyeOff, Lock } from 'lucide-react';
@@ -9,11 +12,6 @@ export default function BottomNav() {
   const location = useLocation();
   const { isTableVisible, setIsTableVisible } = useUI();
   const { canPutaway, canPick } = useAuth();
-  
-  // We have 3 logical positions for the thumb:
-  // -1: Putaway (/receive)
-  // 0: Dash (/)
-  // 1: Pick (/pick)
   
   const getPosFromRoute = (pathname) => {
     if (pathname === '/receive') return -1;
@@ -30,15 +28,13 @@ export default function BottomNav() {
   const startY = useRef(0);
   const containerRef = useRef(null);
   
-  // Total width of the track
   const trackWidth = 360; 
-  const slotWidth = trackWidth / 3; // 120px per slot
+  const slotWidth = trackWidth / 3; 
   
   useEffect(() => {
     setPosIndex(getPosFromRoute(location.pathname));
   }, [location.pathname]);
 
-  // THUMB DRAG HANDLERS
   const handlePointerDown = (e) => {
     setIsDragging(true);
     startX.current = e.clientX - dragOffset;
@@ -51,7 +47,6 @@ export default function BottomNav() {
     let newX = e.clientX - startX.current;
     let newY = e.clientY - startY.current;
     
-    // Bounds checking X (prevent dragging beyond the pill)
     if (posIndex === -1 && newX < 0) newX = 0; 
     if (posIndex === 1 && newX > 0) newX = 0; 
     
@@ -59,9 +54,8 @@ export default function BottomNav() {
     if (absoluteX < -slotWidth) newX = -slotWidth - (posIndex * slotWidth);
     if (absoluteX > slotWidth) newX = slotWidth - (posIndex * slotWidth);
     
-    // Bounds checking Y (allow swipe up, prevent swipe down)
     if (newY > 0) newY = 0;
-    if (newY < -80) newY = -80; // max upward drag
+    if (newY < -80) newY = -80; 
     
     setDragOffset(newX);
     setDragOffsetY(newY);
@@ -71,19 +65,16 @@ export default function BottomNav() {
     if (!isDragging) return;
     setIsDragging(false);
     
-    // Check for scanner swipe up
     if (dragOffsetY <= -50) {
       if (posIndex === -1) alert("Scanner triggered for Putaway (Cosmetic). Hardware not detected.");
       else if (posIndex === 1) alert("Scanner triggered for Picking (Cosmetic). Hardware not detected.");
     }
 
-    // Determine the new snap position X
     const absoluteX = (posIndex * slotWidth) + dragOffset;
     let newPosIndex = 0;
     if (absoluteX <= -(slotWidth / 2)) newPosIndex = -1;
     else if (absoluteX >= (slotWidth / 2)) newPosIndex = 1;
 
-    // Block if no permissions
     if (newPosIndex === -1 && !canPutaway) newPosIndex = 0;
     if (newPosIndex === 1 && !canPick) newPosIndex = 0;
 
@@ -100,7 +91,6 @@ export default function BottomNav() {
     e.target.releasePointerCapture(e.pointerId);
   };
 
-  // BACKGROUND BUTTON DRAG/CLICK HANDLERS
   const handleButtonPointerDown = (e, targetPos) => {
     e.target.setPointerCapture(e.pointerId);
     e.target.dataset.startY = e.clientY;
@@ -141,7 +131,6 @@ export default function BottomNav() {
     }
   };
 
-  // Calculate actual translation of the sliding thumb
   const currentTranslateX = (posIndex * slotWidth) + (isDragging ? dragOffset : 0);
   const currentTranslateY = isDragging ? dragOffsetY : 0;
 
@@ -166,7 +155,6 @@ export default function BottomNav() {
       touchAction: 'none' 
     }}>
       
-      {/* Background active pill (The sliding thumb) */}
       <div 
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -187,7 +175,6 @@ export default function BottomNav() {
         }}
       />
 
-      {/* Putaway Area (Clickable & Swipeable) */}
       <div 
         onPointerDown={canPutaway ? (e) => handleButtonPointerDown(e, -1) : undefined}
         onPointerMove={canPutaway ? handleButtonPointerMove : undefined}
@@ -205,7 +192,6 @@ export default function BottomNav() {
         <span style={{ fontSize: '0.75rem', marginTop: '4px', pointerEvents: 'none' }}>{canPutaway ? 'Putaway' : 'Locked'}</span>
       </div>
 
-      {/* Dashboard Area (Clickable) */}
       <div 
         onClick={() => handleSlotClick(0)}
         style={{
@@ -219,7 +205,6 @@ export default function BottomNav() {
         <span style={{ fontSize: '0.75rem', marginTop: '4px', pointerEvents: 'none' }}>{posIndex === 0 && !isTableVisible ? 'Show' : 'Dash'}</span>
       </div>
 
-      {/* Picking Area (Clickable & Swipeable) */}
       <div 
         onPointerDown={canPick ? (e) => handleButtonPointerDown(e, 1) : undefined}
         onPointerMove={canPick ? handleButtonPointerMove : undefined}

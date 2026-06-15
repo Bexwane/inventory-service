@@ -1,3 +1,6 @@
+/**
+ * Portal login page managing employee sign-in and session initialization.
+ */
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';

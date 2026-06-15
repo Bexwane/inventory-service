@@ -14,15 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Loads warehouse workers from PostgreSQL.
- *
- * WHY THIS EXISTS:
- * The original code used InMemoryUserDetailsManager with one hardcoded user.
- * That means adding an employee requires a code change + redeployment.
- * This service loads from the users table — adding a worker is an INSERT.
- *
- * The users table has: id, employee_id, username, password_hash, role, is_active.
- * Roles map to Spring Security authorities: ROLE_WORKER, ROLE_SUPERVISOR, ROLE_MANAGER.
+ * UserDetailsService implementation that loads user authentication and authorization details from PostgreSQL.
  */
 @Service
 @Transactional(readOnly = true)
@@ -40,10 +32,8 @@ public class DatabaseUserDetailsService implements UserDetailsService {
                 .map(userEntity -> {
                     List<GrantedAuthority> authorities = new ArrayList<>();
                     
-                    // Add the base role
-                    authorities.add(new SimpleGrantedAuthority("ROLE_" + userEntity.getRole()));
+                    authorities.add(new SimpleGrantedAuthority("ROLE_" + userEntity.getRole().name()));
                     
-                    // Add direct permissions
                     userEntity.getPermissions().forEach(p -> 
                             authorities.add(new SimpleGrantedAuthority(p.name())));
 
@@ -54,7 +44,7 @@ public class DatabaseUserDetailsService implements UserDetailsService {
                             .accountExpired(false)
                             .credentialsExpired(false)
                             .disabled(false)
-                            .accountLocked(false)
+                            .accountLocked(!userEntity.isActive())
                             .build();
                 })
                 .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));

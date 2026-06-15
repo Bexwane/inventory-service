@@ -1,3 +1,6 @@
+/**
+ * Component for user management, allowing creation, editing, status toggle, and batch permission updates.
+ */
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
@@ -40,10 +43,8 @@ export default function Users() {
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
   
-  // Selection state
   const [selectedUserIds, setSelectedUserIds] = useState(new Set());
 
-  // Modal states
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editUserId, setEditUserId] = useState(null);
@@ -183,42 +184,21 @@ export default function Users() {
     setFormSuccess('');
 
     try {
-      // Find all selected user objects
-      const selectedUsersList = users.filter(u => selectedUserIds.has(u.id));
+      const userIds = [...selectedUserIds];
 
-      for (const user of selectedUsersList) {
-        let newPermissions = [...(user.permissions || [])];
+      // Single atomic request — the backend handles all users in one transaction
+      await api.patch('/users/batch/permissions', {
+        userIds,
+        permissions: batchPermissions,
+        mode,
+      });
 
-        if (mode === 'OVERWRITE') {
-          // Exact match of whatever is checked
-          newPermissions = [...batchPermissions];
-        } else if (mode === 'UPDATE') {
-          // Only change touched permissions
-          PERMISSIONS.forEach(perm => {
-            if (touchedPermissions.has(perm)) {
-              if (batchPermissions.includes(perm) && !newPermissions.includes(perm)) {
-                newPermissions.push(perm);
-              } else if (!batchPermissions.includes(perm)) {
-                newPermissions = newPermissions.filter(p => p !== perm);
-              }
-            }
-          });
-        }
-
-        await api.put(`/users/${user.id}`, {
-          employeeId: user.employeeId,
-          username: user.username,
-          role: user.role,
-          permissions: newPermissions
-        });
-      }
-
-      setFormSuccess(`Successfully updated permissions for ${selectedUserIds.size} users.`);
+      setFormSuccess(`Successfully updated permissions for ${userIds.length} users.`);
       setShowBatchForm(false);
       setSelectedUserIds(new Set());
       fetchUsers();
     } catch (err) {
-      setFormError('Failed to update some users during batch process.');
+      setFormError(err.response?.data?.message || 'Failed to update permissions. No changes were applied.');
     }
     setSubmitting(false);
   };
@@ -256,7 +236,6 @@ export default function Users() {
   return (
     <div className="animate-fade-in" style={{ maxWidth: '1000px', margin: '0 auto', paddingTop: '1rem', paddingBottom: '3rem' }}>
       
-      {/* Navigation and Header */}
       <div style={{ marginBottom: '2rem' }}>
         <button 
           onClick={() => navigate('/')} 
@@ -294,7 +273,6 @@ export default function Users() {
         </div>
       </div>
 
-      {/* Batch Form Overlay */}
       {showBatchForm && (
         <div className="glass-panel" style={{ marginBottom: '2rem', border: '2px solid var(--warning)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
@@ -347,7 +325,6 @@ export default function Users() {
         </div>
       )}
 
-      {/* Single Form Overlay/Panel */}
       {showForm && (
         <div className="glass-panel" style={{ marginBottom: '2rem', border: '2px solid var(--accent-primary)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
@@ -402,7 +379,6 @@ export default function Users() {
               </div>
             </div>
 
-            {/* Permissions Matrix */}
             <div style={{ marginBottom: '1.5rem', padding: '1.5rem', background: 'rgba(255,255,255,0.8)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '1rem', color: 'var(--text-secondary)' }}>Custom Permissions</label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -445,7 +421,6 @@ export default function Users() {
         </div>
       )}
 
-      {/* Users table */}
       <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading users...</div>

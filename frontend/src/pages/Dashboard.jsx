@@ -1,3 +1,6 @@
+/**
+ * Main dashboard component displaying inventory search, pagination, dynamic layouts, and layout/column toggles.
+ */
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 import { PackageSearch, RefreshCw, ChevronLeft, ChevronRight, Search, ArrowUpDown, SlidersHorizontal, Type, Lock } from 'lucide-react';
@@ -14,24 +17,19 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // Tabs: 'inventory' | 'activity'
   const [activeTab, setActiveTab] = useState('inventory');
   
-  // Pagination state
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [size, setSize] = useState(20);
   const [sliderSize, setSliderSize] = useState(20);
 
-  // Search & Sort state
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
-  // Text size state
-  const [textSize, setTextSize] = useState('medium'); // small, medium, large
+  const [textSize, setTextSize] = useState('medium');
 
-  // Column visibility state
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const saved = localStorage.getItem('dashboard_visibleColumns');
     if (saved) return JSON.parse(saved);
@@ -57,7 +55,6 @@ export default function Dashboard() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [leftPanelWidth, setLeftPanelWidth] = useState(450);
 
-  // Debounce search term
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
@@ -111,15 +108,12 @@ export default function Dashboard() {
 
   const tableContent = canManageInventory ? (
     <>
-      {/* Center Table Area */}
       {isTableVisible ? (
         <div className="table-area animate-fade-in" style={{ '--table-font-size': getFontSize() }}>
           
-          {/* Sticky Toolbar */}
           <div className="sticky-search-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.5rem', padding: '1rem' }}>
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
-              {/* Search */}
               <div className="search-input-wrapper" style={{ flex: 1 }}>
                 <Search size={20} className="search-icon" />
                 <input 
@@ -131,7 +125,6 @@ export default function Dashboard() {
                 />
               </div>
               
-              {/* Refresh */}
               {activeTab === 'inventory' && (
                 <button className="btn btn-blue" onClick={() => fetchInventory(page, size, debouncedSearchTerm, sortConfig)} disabled={loading} style={{ height: '42px', padding: '0 1rem', borderRadius: '10px', fontSize: '1rem', fontWeight: 'bold' }}>
                   <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
@@ -140,7 +133,6 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* View Toggles */}
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', background: 'var(--bg-primary)', padding: '0.5rem', borderRadius: '16px', width: 'fit-content', border: '1px solid var(--border-color)' }}>
               <button 
                 className={`btn ${activeTab === 'inventory' ? 'btn-primary' : 'btn-secondary'}`} 
@@ -160,10 +152,8 @@ export default function Dashboard() {
 
             {activeTab === 'inventory' ? (
               <>
-                {/* Grouped Controls */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
                   
-                  {/* Pagination Controls Pill */}
               <div className="control-pill" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'var(--bg-primary)', padding: '0.4rem 0.75rem', borderRadius: '100px', border: '1px solid var(--border-color)' }}>
                 <button className="btn btn-secondary btn-large" style={{ borderRadius: '50px', padding: '0.4rem 1rem', minHeight: '36px', fontSize: '0.9rem' }} disabled={page === 0 || loading} onClick={() => setPage(page - 1)}>
                   <ChevronLeft size={18} /> Prev
@@ -176,7 +166,6 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              {/* Page Size Pill */}
               <div className="control-pill" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'var(--bg-primary)', padding: '0.4rem 1rem', borderRadius: '100px', border: '1px solid var(--border-color)' }}>
                 <SlidersHorizontal size={18} color="var(--text-secondary)" />
                 <span style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.95rem' }}>Size: {sliderSize}</span>
@@ -201,7 +190,6 @@ export default function Dashboard() {
                 />
               </div>
 
-              {/* Text Size Pill */}
               <div className="control-pill desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'var(--bg-primary)', padding: '0.4rem 0.75rem', borderRadius: '100px', border: '1px solid var(--border-color)' }}>
                 <Type size={18} color="var(--text-secondary)" />
                 <div className="text-size-toggles">
@@ -211,7 +199,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Layout Width Pill */}
               <div className="control-pill desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'var(--bg-primary)', padding: '0.4rem 1rem', borderRadius: '100px', border: '1px solid var(--border-color)' }}>
                 <span style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.95rem' }}>Forms Width</span>
                 <input 
@@ -225,7 +212,6 @@ export default function Dashboard() {
                 />
               </div>
 
-              {/* Column Visibility Pill */}
               <div className="control-pill" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-primary)', padding: '0.4rem 0.75rem', borderRadius: '100px', border: '1px solid var(--border-color)' }}>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Cols:</span>
                 {['sku', 'locationId', 'containerId', 'qtyOnHand', 'qtyReserved', 'available', 'status'].map(col => (
@@ -309,7 +295,7 @@ export default function Dashboard() {
                   inventory.map((item) => {
                     const available = item.qtyOnHand - item.qtyReserved;
                     return (
-                      <tr key={item.id}>
+                      <tr key={`${item.sku}-${item.locationId}-${item.containerId || 'none'}`}>
                         {visibleColumns.sku && <td style={{ fontWeight: '500' }}>{item.sku}</td>}
                         {visibleColumns.locationId && <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{item.locationId}</td>}
                         {visibleColumns.containerId && <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{item.containerId || '-'}</td>}

@@ -1,7 +1,3 @@
-// ─────────────────────────────────────────────────────────────
-// FILE: IdempotencyService.java
-// Prevents double-processing of retried scanner requests
-// ─────────────────────────────────────────────────────────────
 package com.enterprise.inventory.inventory.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,29 +11,23 @@ import java.util.function.Supplier;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 /**
- * Prevents double-processing when scanner apps retry requests.
+ * Service to guarantee idempotency of incoming requests by caching results in Redis.
  *
- * HOW IT WORKS:
- * 1. Client generates a UUID before sending the request (X-Idempotency-Key header).
- * 2. On first call: process normally, store the result in Redis with a 24h TTL.
- * 3. On retry: find the cached result in Redis, return it immediately — don't re-process.
- *
- * WHY 24 HOURS:
- * Warehouse shifts are typically 8-12 hours. A retry could come hours later
- * if the scanner was offline. 24h covers the full shift with margin.
- *
- * WHAT IF REDIS IS DOWN:
- * We fail open — process the request normally. This means a retry could
- * double-count in a Redis outage, but it's better than stopping all warehouse operations.
- * The stock_movements audit log can be used to detect and correct duplicates.
+ * Uses an atomic SET NX (set-if-not-exists) pattern to prevent the race condition
+ * where two concurrent requests with the same idempotency key would both see a cache
+ * miss and execute the operation twice. The key is reserved with a PENDING sentinel
+ * before execution, so any duplicate request sees the key already exists and waits
+ * or returns a 409 conflict.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class IdempotencyService {
 
-    private static final String PREFIX = "idempotency:";
-    private static final Duration TTL  = Duration.ofHours(24);
+    private static final String PREFIX          = "idempotency:";
+    private static final String PENDING         = "__PENDING__";
+    private static final Duration TTL           = Duration.ofHours(24);
+    private static final Duration PENDING_TTL   = Duration.ofSeconds(30);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper        objectMapper;
@@ -45,29 +35,39 @@ public class IdempotencyService {
     public <T> T getOrCompute(String idempotencyKey, Supplier<T> operation, Class<T> responseType) {
         String redisKey = PREFIX + idempotencyKey;
 
+        // 1. Check for a cached result first
         try {
             String cached = redisTemplate.opsForValue().get(redisKey);
-            if (cached != null) {
+            if (cached != null && !PENDING.equals(cached)) {
                 log.debug("Idempotency cache hit for key: {}", idempotencyKey);
-                // Deserialize back into the exact type — no unsafe cast
                 return objectMapper.readValue(cached, responseType);
             }
+            if (PENDING.equals(cached)) {
+                throw new IllegalStateException("A request with this idempotency key is already being processed. Please retry shortly.");
+            }
+        } catch (IllegalStateException e) {
+            throw e;
         } catch (Exception e) {
-            // Redis down — fall through and process normally
             log.warn("Idempotency cache read failed — processing anyway: {}", e.getMessage());
         }
 
-        T result = operation.get();
-
-        try {
-            redisTemplate.opsForValue().set(
-                    redisKey, objectMapper.writeValueAsString(result), TTL);
-        } catch (Exception e) {
-            // Cache write failed — not critical, result is still returned to client
-            log.warn("Idempotency cache write failed: {}", e.getMessage());
+        // 2. Atomically reserve the key with a PENDING sentinel (SET NX)
+        Boolean reserved = redisTemplate.opsForValue().setIfAbsent(redisKey, PENDING, PENDING_TTL);
+        if (!Boolean.TRUE.equals(reserved)) {
+            // Another thread/instance already reserved this key concurrently
+            throw new IllegalStateException("A request with this idempotency key is already being processed. Please retry shortly.");
         }
 
-        return result;
+        // 3. Execute the operation now that we hold the lock
+        try {
+            T result = operation.get();
+            redisTemplate.opsForValue().set(redisKey, objectMapper.writeValueAsString(result), TTL);
+            return result;
+        } catch (Exception e) {
+            // Release the lock on failure so the client can retry with the same key
+            redisTemplate.delete(redisKey);
+            throw (e instanceof RuntimeException re) ? re : new RuntimeException(e);
+        }
     }
 
     public <T> T getOrCompute(String idempotencyKey, Supplier<T> operation, TypeReference<T> typeRef) {
@@ -75,25 +75,31 @@ public class IdempotencyService {
 
         try {
             String cached = redisTemplate.opsForValue().get(redisKey);
-            if (cached != null) {
+            if (cached != null && !PENDING.equals(cached)) {
                 log.debug("Idempotency cache hit for key: {}", idempotencyKey);
                 return objectMapper.readValue(cached, typeRef);
             }
+            if (PENDING.equals(cached)) {
+                throw new IllegalStateException("A request with this idempotency key is already being processed. Please retry shortly.");
+            }
+        } catch (IllegalStateException e) {
+            throw e;
         } catch (Exception e) {
             log.warn("Idempotency cache read failed — processing anyway: {}", e.getMessage());
         }
 
-        T result = operation.get();
-
-        try {
-            redisTemplate.opsForValue().set(
-                    redisKey, objectMapper.writeValueAsString(result), TTL);
-        } catch (Exception e) {
-            log.warn("Idempotency cache write failed: {}", e.getMessage());
+        Boolean reserved = redisTemplate.opsForValue().setIfAbsent(redisKey, PENDING, PENDING_TTL);
+        if (!Boolean.TRUE.equals(reserved)) {
+            throw new IllegalStateException("A request with this idempotency key is already being processed. Please retry shortly.");
         }
 
-        return result;
+        try {
+            T result = operation.get();
+            redisTemplate.opsForValue().set(redisKey, objectMapper.writeValueAsString(result), TTL);
+            return result;
+        } catch (Exception e) {
+            redisTemplate.delete(redisKey);
+            throw (e instanceof RuntimeException re) ? re : new RuntimeException(e);
+        }
     }
 }
-
-
