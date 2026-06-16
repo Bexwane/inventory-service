@@ -52,7 +52,7 @@ public class UserController {
 
     @PutMapping("/{id}")
     public ResponseEntity<UserResponseDTO> updateUser(@PathVariable UUID id,
-                                                   @Valid @RequestBody UpdateUserDTO request) {
+                                                      @Valid @RequestBody UpdateUserDTO request) {
         return userService.updateUser(id, request)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());

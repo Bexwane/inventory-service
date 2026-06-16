@@ -54,7 +54,8 @@ public class InventoryController {
 
         return ResponseEntity.ok(response);
     }
-//idempotecy values  -> forwareded to service layer inwhich operation are wrapped in idempotency checks
+
+    // Idempotency values are forwarded to the service layer, where operations are wrapped in idempotency checks
     @PreAuthorize("hasAuthority('CAN_PUTAWAY')")
     @PostMapping("/receive/batch")
     public ResponseEntity<List<InventoryResponseDTO>> receiveStockBatch(
@@ -65,7 +66,10 @@ public class InventoryController {
         UUID performedBy = resolveUserId(authHeader);
 
         List<InventoryResponseDTO> response = inventoryService.receiveStockBatch(
-                request, performedBy, idempotencyKey);
+                request, 
+                performedBy, 
+                idempotencyKey
+        );
 
         return ResponseEntity.ok(response);
     }
@@ -77,7 +81,11 @@ public class InventoryController {
             @RequestHeader(IDEMPOTENCY_HEADER) String idempotencyKey,
             @RequestHeader("Authorization") String authHeader) {
 
-        InventoryResponseDTO response = inventoryService.reserveStock(request, resolveUserId(authHeader), idempotencyKey);
+        InventoryResponseDTO response = inventoryService.reserveStock(
+                request, 
+                resolveUserId(authHeader), 
+                idempotencyKey
+        );
         return ResponseEntity.ok(response);
     }
 
@@ -89,7 +97,10 @@ public class InventoryController {
             @RequestHeader("Authorization") String authHeader) {
 
         InventoryResponseDTO response = inventoryService.confirmPick(
-                request, resolveUserId(authHeader), idempotencyKey);
+                request, 
+                resolveUserId(authHeader), 
+                idempotencyKey
+        );
 
         return ResponseEntity.ok(response);
     }
@@ -101,8 +112,13 @@ public class InventoryController {
             @RequestHeader("Authorization") String authHeader) {
 
         inventoryService.releaseReservation(
-                request.sku(), request.locationId(), request.containerId(), request.qty(),
-                request.taskId(), resolveUserId(authHeader));
+                request.sku(), 
+                request.locationId(), 
+                request.containerId(), 
+                request.qty(),
+                request.taskId(), 
+                resolveUserId(authHeader)
+        );
 
         return ResponseEntity.noContent().build();
     }

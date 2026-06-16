@@ -12,7 +12,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
-import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -46,19 +45,25 @@ public class JwtUtil {
     }
 
     public String generateAccessToken(UserDetails userDetails, java.util.UUID userId) {
-        return buildToken(userDetails.getUsername(), "access", accessExpirationMs,
+        return buildToken(
+                userDetails.getUsername(), 
+                "access", 
+                accessExpirationMs,
                 Map.of(
                         "roles",  userDetails.getAuthorities().stream().map(a -> a.getAuthority()).toList(),
                         "userId", userId.toString()
-                ));
+                )
+        );
     }
 
     public String generateRefreshToken(UserDetails userDetails) {
         return buildToken(userDetails.getUsername(), "refresh", refreshExpirationMs, Map.of());
     }
 
-    private String buildToken(String subject, String tokenType,
-                               long expirationMs, Map<String, Object> extraClaims) {
+    private String buildToken(String subject, 
+                              String tokenType,
+                              long expirationMs, 
+                              Map<String, Object> extraClaims) {
         long now = System.currentTimeMillis();
         return Jwts.builder()
                 .subject(subject)

@@ -74,10 +74,14 @@ public class StockMovementJpaEntity {
     @Column(name = "synced_to_sap", nullable = false)
     private boolean syncedToSap = false;
 
-    public static StockMovementJpaEntity of(MovementType type, String sku,
-                                            UUID fromLocation, UUID toLocation,
-                                            UUID container, int qty,
-                                            String referenceId, String referenceType,
+    public static StockMovementJpaEntity of(MovementType type, 
+                                            String sku,
+                                            UUID fromLocation, 
+                                            UUID toLocation,
+                                            UUID container, 
+                                            int qty,
+                                            String referenceId, 
+                                            String referenceType,
                                             UUID performedBy) {
         StockMovementJpaEntity e = new StockMovementJpaEntity();
         e.movementType  = type;

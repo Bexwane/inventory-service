@@ -59,7 +59,7 @@ public class AuthController {
                 accessToken,
                 refreshToken,
                 3600L
-                ));
+        ));
     }
 
     @PostMapping("/refresh")

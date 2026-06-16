@@ -81,13 +81,18 @@ public class InventoryJpaEntity {
     }
 
     public void confirmPick(int reservedAmount, int actualAmount) {
-        if (actualAmount < 0)         throw new IllegalArgumentException("Actual amount cannot be negative");
-        if (actualAmount > reservedAmount) throw new IllegalArgumentException(
-                "Actual amount cannot exceed reserved amount");
-        if (reservedAmount > qtyReserved) throw new IllegalArgumentException(
-                "Reserved amount " + reservedAmount + " exceeds current reservation " + qtyReserved);
-        if (actualAmount > qtyOnHand) throw new IllegalArgumentException(
-                "Actual amount " + actualAmount + " exceeds onHand qty " + qtyOnHand);
+        if (actualAmount < 0) {
+            throw new IllegalArgumentException("Actual amount cannot be negative");
+        }
+        if (actualAmount > reservedAmount) {
+            throw new IllegalArgumentException("Actual amount cannot exceed reserved amount");
+        }
+        if (reservedAmount > qtyReserved) {
+            throw new IllegalArgumentException("Reserved amount " + reservedAmount + " exceeds current reservation " + qtyReserved);
+        }
+        if (actualAmount > qtyOnHand) {
+            throw new IllegalArgumentException("Actual amount " + actualAmount + " exceeds onHand qty " + qtyOnHand);
+        }
 
         this.qtyOnHand   -= actualAmount;
         this.qtyReserved -= reservedAmount;

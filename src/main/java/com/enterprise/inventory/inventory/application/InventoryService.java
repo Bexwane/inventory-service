@@ -46,9 +46,13 @@ public class InventoryService {
             Set.of("sku", "qtyOnHand", "qtyReserved", "createdAt", "updatedAt");
 
     @Transactional
-    public InventoryResponseDTO receiveStock(String sku, UUID locationId, UUID containerId, int amount,
-                                          String taskId, UUID performedBy,
-                                          String idempotencyKey) {
+    public InventoryResponseDTO receiveStock(String sku, 
+                                             UUID locationId, 
+                                             UUID containerId, 
+                                             int amount,
+                                             String taskId, 
+                                             UUID performedBy,
+                                             String idempotencyKey) {
 
         return idempotencyService.getOrCompute(idempotencyKey, () -> {
 
@@ -68,11 +72,28 @@ public class InventoryService {
 
             StockMovementJpaEntity movement = movementRepository.save(StockMovementJpaEntity.of(
                     StockMovementJpaEntity.MovementType.RECEIVE,
-                    sku, null, locationId, containerId, amount,
-                    taskId, "PUTAWAY_TASK", performedBy));
+                    sku, 
+                    null, 
+                    locationId, 
+                    containerId, 
+                    amount,
+                    taskId, 
+                    "PUTAWAY_TASK", 
+                    performedBy
+            ));
 
             applicationEventPublisher.publishEvent(
-                    new InventoryEvent(InventoryEvent.Type.STOCK_RECEIVED, movement.getId(), sku, locationId, containerId, amount, taskId, 0));
+                    new InventoryEvent(
+                            InventoryEvent.Type.STOCK_RECEIVED, 
+                            movement.getId(), 
+                            sku, 
+                            locationId, 
+                            containerId, 
+                            amount, 
+                            taskId, 
+                            0
+                    )
+            );
 
             log.info("Stock received: sku={} location={} container={} amount={} task={}",
                     sku, locationId, containerId, amount, taskId);
@@ -112,11 +133,28 @@ public class InventoryService {
 
                     StockMovementJpaEntity movement = movementRepository.save(StockMovementJpaEntity.of(
                             StockMovementJpaEntity.MovementType.RECEIVE,
-                            sku, sourceLocationId, destLocationId, containerId, amount,
-                            taskId, "PUTAWAY_TASK", performedBy));
+                            sku, 
+                            sourceLocationId, 
+                            destLocationId, 
+                            containerId, 
+                            amount,
+                            taskId, 
+                            "PUTAWAY_TASK", 
+                            performedBy
+                    ));
 
                     applicationEventPublisher.publishEvent(
-                            new InventoryEvent(InventoryEvent.Type.STOCK_RECEIVED, movement.getId(), sku, destLocationId, containerId, amount, taskId, 0));
+                            new InventoryEvent(
+                                    InventoryEvent.Type.STOCK_RECEIVED, 
+                                    movement.getId(), 
+                                    sku, 
+                                    destLocationId, 
+                                    containerId, 
+                                    amount, 
+                                    taskId, 
+                                    0
+                            )
+                    );
 
                     log.info("Batch stock received: sku={} from={} toLoc={} container={} amount={} task={}",
                             sku, sourceLocationId, destLocationId, containerId, amount, taskId);
@@ -145,8 +183,15 @@ public class InventoryService {
 
             movementRepository.save(StockMovementJpaEntity.of(
                     StockMovementJpaEntity.MovementType.RESERVE,
-                    request.sku(), request.locationId(), null, request.containerId(), request.qty(),
-                    request.taskId(), "PICK_TASK", performedBy));
+                    request.sku(), 
+                    request.locationId(), 
+                    null, 
+                    request.containerId(), 
+                    request.qty(),
+                    request.taskId(), 
+                    "PICK_TASK", 
+                    performedBy
+            ));
 
             log.info("Stock reserved: sku={} location={} qty={} task={}",
                     request.sku(), request.locationId(), request.qty(), request.taskId());
@@ -175,20 +220,43 @@ public class InventoryService {
 
             StockMovementJpaEntity movement = movementRepository.save(StockMovementJpaEntity.of(
                     StockMovementJpaEntity.MovementType.PICK,
-                    request.sku(), request.locationId(), null, request.containerId(), request.actualQty(),
-                    request.taskId(), "PICK_TASK", performedBy));
+                    request.sku(), 
+                    request.locationId(), 
+                    null, 
+                    request.containerId(), 
+                    request.actualQty(),
+                    request.taskId(), 
+                    "PICK_TASK", 
+                    performedBy
+            ));
 
             applicationEventPublisher.publishEvent(
-                    new InventoryEvent(InventoryEvent.Type.PICK_CONFIRMED, movement.getId(), request.sku(),
-                            request.locationId(), request.containerId(),
-                            request.actualQty(), request.taskId(), 0));
+                    new InventoryEvent(
+                            InventoryEvent.Type.PICK_CONFIRMED, 
+                            movement.getId(), 
+                            request.sku(),
+                            request.locationId(), 
+                            request.containerId(),
+                            request.actualQty(), 
+                            request.taskId(), 
+                            0
+                    )
+            );
 
             if (isShortPick) {
                 int discrepancy = request.reservedQty() - request.actualQty();
                 applicationEventPublisher.publishEvent(
-                        new InventoryEvent(InventoryEvent.Type.SHORT_PICK, movement.getId(), request.sku(),
-                                request.locationId(), request.containerId(),
-                                0, request.taskId(), discrepancy));
+                        new InventoryEvent(
+                                InventoryEvent.Type.SHORT_PICK, 
+                                movement.getId(), 
+                                request.sku(),
+                                request.locationId(), 
+                                request.containerId(),
+                                0, 
+                                request.taskId(), 
+                                discrepancy
+                        )
+                );
                 log.warn("Short pick: sku={} reserved={} actual={} discrepancy={}",
                         request.sku(), request.reservedQty(), request.actualQty(), discrepancy);
             }
@@ -218,8 +286,15 @@ public class InventoryService {
 
         movementRepository.save(StockMovementJpaEntity.of(
                 StockMovementJpaEntity.MovementType.RELEASE,
-                sku, locationId, null, containerId, qty,
-                taskId, "PICK_TASK", performedBy));
+                sku, 
+                locationId, 
+                null, 
+                containerId, 
+                qty,
+                taskId, 
+                "PICK_TASK", 
+                performedBy
+        ));
 
         log.info("Reservation released: sku={} location={} qty={} task={}", sku, locationId, qty, taskId);
     }
