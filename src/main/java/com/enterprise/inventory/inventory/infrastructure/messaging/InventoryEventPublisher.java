@@ -1,7 +1,6 @@
 package com.enterprise.inventory.inventory.infrastructure.messaging;
 
 import com.enterprise.inventory.inventory.application.InventoryEvent;
-import com.enterprise.inventory.inventory.application.InventoryEvent;
 import com.enterprise.inventory.inventory.infrastructure.persistence.StockMovementRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

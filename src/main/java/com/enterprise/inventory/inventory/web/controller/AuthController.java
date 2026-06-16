@@ -1,11 +1,11 @@
 package com.enterprise.inventory.inventory.web.controller;
 
 import com.enterprise.inventory.inventory.infrastructure.config.JwtUtil;
+import com.enterprise.inventory.inventory.infrastructure.config.TokenBlacklistService;
 import com.enterprise.inventory.inventory.infrastructure.persistence.UserRepository;
 import com.enterprise.inventory.inventory.web.dto.AuthDTO;
 import com.enterprise.inventory.inventory.web.dto.AuthResponseDTO;
 import com.enterprise.inventory.inventory.web.dto.ErrorResponseDTO;
-import com.enterprise.inventory.inventory.infrastructure.config.TokenBlacklistService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +17,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 /**
  * REST controller handling authentication endpoints, including user login, token refresh, and logout blacklisting.
  */
@@ -25,6 +27,8 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
+
+    private static final long ACCESS_TOKEN_LIFETIME_SECONDS = 3600L;
 
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService    userDetailsService;
@@ -46,8 +50,8 @@ public class AuthController {
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(request.username());
 
-        java.util.UUID userId = userRepository.findByUsernameAndIsActiveTrue(request.username())
-                .map(u -> u.getId())
+        UUID userId = userRepository.findByUsernameAndIsActiveTrue(request.username())
+                .map(user -> user.getId())
                 .orElseThrow();
 
         String accessToken  = jwtUtil.generateAccessToken(userDetails, userId);
@@ -58,7 +62,7 @@ public class AuthController {
         return ResponseEntity.ok(new AuthResponseDTO(
                 accessToken,
                 refreshToken,
-                3600L
+                ACCESS_TOKEN_LIFETIME_SECONDS
         ));
     }
 
@@ -79,8 +83,8 @@ public class AuthController {
         String username = jwtUtil.extractUsername(refreshToken);
         UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-        java.util.UUID userId = userRepository.findByUsernameAndIsActiveTrue(username)
-                .map(u -> u.getId())
+        UUID userId = userRepository.findByUsernameAndIsActiveTrue(username)
+                .map(user -> user.getId())
                 .orElseThrow();
 
         String newAccessToken = jwtUtil.generateAccessToken(userDetails, userId);
@@ -88,7 +92,7 @@ public class AuthController {
         return ResponseEntity.ok(new AuthResponseDTO(
                 newAccessToken,
                 refreshToken,
-                3600L
+                ACCESS_TOKEN_LIFETIME_SECONDS
         ));
     }
 

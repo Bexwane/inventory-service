@@ -108,10 +108,9 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     }
 
     private String getClientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
+        // SECURITY FIX: Never parse X-Forwarded-For manually. It is easily spoofed by attackers.
+        // Rely on Tomcat/Spring's remote address, which should be secured via proxy configuration
+        // (e.g. server.forward-headers-strategy=FRAMEWORK) in a real deployment.
         return request.getRemoteAddr();
     }
 }

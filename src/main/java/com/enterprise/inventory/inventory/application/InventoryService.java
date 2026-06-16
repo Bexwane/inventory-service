@@ -16,6 +16,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +24,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -41,6 +43,7 @@ public class InventoryService {
     private final StockMovementRepository movementRepository;
     private final IdempotencyService      idempotencyService;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final StringRedisTemplate     redisTemplate;
 
     private static final Set<String> ALLOWED_SORT_FIELDS =
             Set.of("sku", "qtyOnHand", "qtyReserved", "createdAt", "updatedAt");
@@ -181,6 +184,16 @@ public class InventoryService {
             entity.reserveStock(request.qty());
             inventoryRepository.save(entity);
 
+            // SECURITY FIX: Create a 2-hour reservation lock in Redis tied specifically to this Task ID.
+            // This prevents other users from stealing this reservation during the confirm step.
+            String lockKey = "reservation:lock:%s:%s:%s:%s".formatted(
+                    request.taskId(),
+                    request.sku(),
+                    request.locationId(),
+                    request.containerId() == null ? "NONE" : request.containerId()
+            );
+            redisTemplate.opsForValue().set(lockKey, String.valueOf(request.qty()), Duration.ofHours(2));
+
             movementRepository.save(StockMovementJpaEntity.of(
                     StockMovementJpaEntity.MovementType.RESERVE,
                     request.sku(), 
@@ -213,8 +226,27 @@ public class InventoryService {
                                     + " at location " + request.locationId()
                                     + " container " + request.containerId()));
 
+            // SECURITY FIX: Verify that THIS task actually holds a reservation lock in Redis.
+            String lockKey = "reservation:lock:%s:%s:%s:%s".formatted(
+                    request.taskId(),
+                    request.sku(),
+                    request.locationId(),
+                    request.containerId() == null ? "NONE" : request.containerId()
+            );
+            String lockedQtyStr = redisTemplate.opsForValue().get(lockKey);
+            if (lockedQtyStr == null) {
+                throw new IllegalStateException("SECURITY VIOLATION: No active reservation found for Task ID " + request.taskId() + ". Pick denied.");
+            }
+            int actualLockedQty = Integer.parseInt(lockedQtyStr);
+            if (request.reservedQty() != actualLockedQty) {
+                throw new IllegalStateException("SECURITY VIOLATION: Task ID " + request.taskId() + " reserved " + actualLockedQty + " but attempted to confirm using " + request.reservedQty());
+            }
+
             entity.confirmPick(request.reservedQty(), request.actualQty());
             inventoryRepository.save(entity);
+
+            // Delete the lock since the reservation is fulfilled.
+            redisTemplate.delete(lockKey);
 
             boolean isShortPick = request.actualQty() < request.reservedQty();
 
@@ -283,6 +315,12 @@ public class InventoryService {
         InventoryJpaEntity entity = optionalEntity.get();
         entity.releaseReservation(qty);
         inventoryRepository.save(entity);
+
+        // Delete the Redis reservation lock to prevent zombie locks
+        String lockKey = "reservation:lock:%s:%s:%s:%s".formatted(
+                taskId, sku, locationId, containerId == null ? "NONE" : containerId
+        );
+        redisTemplate.delete(lockKey);
 
         movementRepository.save(StockMovementJpaEntity.of(
                 StockMovementJpaEntity.MovementType.RELEASE,
