@@ -33,8 +33,7 @@ export default function ActivityLog() {
 
   const formatDate = (isoString) => {
     if (!isoString) return '';
-    const d = new Date(isoString);
-    return d.toLocaleString();
+    return new Date(isoString).toLocaleString();
   };
 
   const getActionBadge = (type) => {
