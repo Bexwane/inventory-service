@@ -16,20 +16,16 @@ CATEGORIES = {
 
 def get_token():
     try:
-        data = json.dumps({"username": "admin", "password": "admin123"}).encode('utf-8')
-        req = urllib.request.Request(f"{API_BASE}/auth/login", data=data, headers={'Content-Type': 'application/json'})
+        data = json.dumps({"username": "admin", "password": "adminpassword"}).encode('utf-8')
+        req = urllib.request.Request(f"{API_BASE}/auth/login", data=data, headers={'Content-Type': 'application/json', 'X-Idempotency-Key': str(uuid.uuid4())})
         with urllib.request.urlopen(req) as res:
             body = json.loads(res.read().decode('utf-8'))
-            return body.get('token')
+            return body.get('accessToken')
     except Exception as e:
         print(f"Failed to login: {e}")
         return None
 
 def seed_inventory(token, num_entries=200):
-    headers = {
-        'Authorization': f'Bearer {token}',
-        'Content-Type': 'application/json'
-    }
     locations = [str(uuid.uuid4()) for _ in range(50)]
     success_count = 0
     print(f"Starting to seed {num_entries} inventory records...")
@@ -43,8 +39,16 @@ def seed_inventory(token, num_entries=200):
         payload = {
             "sku": sku,
             "locationId": loc_id,
+            "containerId": str(uuid.uuid4()),
             "qty": qty,
+            "taskId": f"TSK-{random.randint(1000, 9999)}",
             "referenceId": f"PO-2026-{random.randint(1000, 9999)}"
+        }
+        
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json',
+            'X-Idempotency-Key': str(uuid.uuid4())
         }
         
         data = json.dumps(payload).encode('utf-8')
@@ -66,6 +70,6 @@ def seed_inventory(token, num_entries=200):
 if __name__ == "__main__":
     token = get_token()
     if token:
-        seed_inventory(token, 250)
+        seed_inventory(token, 150)
     else:
         print("Could not obtain auth token. Is the backend running?")

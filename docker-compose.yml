@@ -1,9 +1,6 @@
 version: '3.8'
 
 services:
-  # ─────────────────────────────────────────────────────────
-  # PostgreSQL Database
-  # ─────────────────────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
     container_name: wms-postgres
@@ -21,9 +18,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ─────────────────────────────────────────────────────────
-  # Redis (For Idempotency & Token Blacklist)
-  # ─────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: wms-redis
@@ -32,11 +26,6 @@ services:
     volumes:
       - redis_data:/data
 
-  # ─────────────────────────────────────────────────────────
-  # Kafka (For async SAP events)
-  # Uses Redpanda, a lightweight, Kafka-compatible alternative 
-  # that doesn't require Zookeeper (perfect for local dev)
-  # ─────────────────────────────────────────────────────────
   kafka:
     image: docker.redpanda.com/redpandadata/redpanda:v23.2.19
     container_name: wms-kafka

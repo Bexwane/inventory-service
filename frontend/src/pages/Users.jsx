@@ -186,7 +186,6 @@ export default function Users() {
     try {
       const userIds = [...selectedUserIds];
 
-      // Single atomic request — the backend handles all users in one transaction
       await api.patch('/users/batch/permissions', {
         userIds,
         permissions: batchPermissions,
