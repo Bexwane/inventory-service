@@ -42,3 +42,12 @@ build/
 *.env
 *.env.*
 split.py
+
+# Ignore generated utility scripts
+cleanup.py
+fix_imports.sh
+refactor.py
+seed.sql
+seed_inventory.py
+style_docx.py
+split.py
