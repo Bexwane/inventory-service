@@ -13,17 +13,17 @@ A robust, highly concurrent Warehouse Management & Inventory System.
 
 Here are some previews of the running application:
 
-### Interface
-![Demo 1](demo/demo-1.png)
+### Admin Inventory View
+![Admin Inventory View](demo/admin-inventory-view.png)
 
-### Dashboard
-![Demo 2](demo/demo-2.png)
+### Admin Activity Logs
+![Admin Activity Logs](demo/admin-activity-logs.png)
 
-### Operations
-![Demo 3](demo/demo-3.png)
+### Permission Management Screen for Admin
+![Permission Management Screen for Admin](demo/permission-management-screen-for-admin.png)
 
-### Workflows
-![Demo 4](demo/demo-4.png)
+### Worker with Putaway and Picking Permissions
+![Worker with Putaway and Picking Permissions](demo/worker-with-putaway-and-picking-permissions.png)
 
-### Real-time Logs
-![Demo 5](demo/demo-5.png)
+### Worker Interface with Picking Permissions
+![Worker Interface with Picking Permissions](demo/worker-interface-with-picking-permissions.png)
