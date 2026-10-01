@@ -1,5 +1,7 @@
 # Enterprise Inventory Service
 
+> **Note**: This repository was developed as an **Internship Project**.
+
 A robust, highly concurrent Warehouse Management & Inventory System.
 
 ## Tech Stack
